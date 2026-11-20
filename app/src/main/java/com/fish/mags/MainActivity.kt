@@ -438,6 +438,7 @@ fun MagsApp() {
                     }
                     val slide = remember { Animatable(idx.toFloat()) }
                     var dragging by remember { mutableStateOf(false) }
+                    var dragPos by remember { mutableFloatStateOf(idx.toFloat()) }
 
                     fun commit(i: Int) {
                         val key = opts[i.coerceIn(0, opts.size - 1)].first
@@ -489,11 +490,9 @@ fun MagsApp() {
                                         totalDx += dx
                                         if (moved) {
                                             ch.consume()
-                                            // 直接在这里 suspend 调用，避免每帧新建协程
-                                            slide.snapTo(
-                                                (startIdx + totalDx / tabPx)
-                                                    .coerceIn(0f, last)
-                                            )
+                                            // 普通 state 赋值：每帧只触发一次重组，不起协程
+                                            dragPos = (startIdx + totalDx / tabPx)
+                                                .coerceIn(0f, last)
                                         }
                                     }
                                     dragging = false
@@ -506,10 +505,11 @@ fun MagsApp() {
                                             )
                                         }
                                     } else {
-                                        val target = slide.value.roundToInt()
+                                        val target = dragPos.roundToInt()
                                             .coerceIn(0, opts.size - 1)
                                         commit(target)
                                         scope.launch {
+                                            slide.snapTo(dragPos)
                                             slide.animateTo(
                                                 target.toFloat(),
                                                 spring(dampingRatio = 0.68f, stiffness = 360f)
@@ -523,7 +523,7 @@ fun MagsApp() {
                     // 指示器
                     Box(
                         Modifier
-                            .offset(x = tabW * slide.value + 4.dp)
+                            .offset(x = tabW * (if (dragging) dragPos else slide.value) + 4.dp)
                             .width(tabW - 8.dp)
                             .fillMaxHeight()
                             .padding(vertical = 4.dp)
