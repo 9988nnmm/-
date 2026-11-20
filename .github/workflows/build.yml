@@ -17,8 +17,20 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # runner 自带 Android SDK，不走 setup-android（它装已废弃的 tools 包会失败）
+      - name: Inspect Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls "$ANDROID_HOME/platforms" 2>/dev/null || echo "(no platforms)"
+          ls "$ANDROID_HOME/build-tools" 2>/dev/null || echo "(no build-tools)"
+
+      - name: Ensure SDK 35 present
+        run: |
+          SDKM=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)
+          echo "sdkmanager=$SDKM"
+          yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+          "$SDKM" "platforms;android-35" "build-tools;35.0.0" 2>&1 | tail -5 || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
