@@ -205,10 +205,21 @@ fun MagsApp() {
             Box(
                 Modifier.fillMaxSize().background(
                     Brush.verticalGradient(
-                        0f to Color(0x8C0A0E1A),
-                        0.28f to Color(0x400A0E1A),
-                        0.62f to Color(0x4D0A0E1A),
-                        1f to Color(0xCC0A0E1A)
+                        0f to Color(0xD90A0E1A),
+                        0.22f to Color(0xA60A0E1A),
+                        0.55f to Color(0x8C101A2E),
+                        0.82f to Color(0xB30A0E1A),
+                        1f to Color(0xE60A0E1A)
+                    )
+                )
+            )
+            // 顶部额外压暗（樱花最亮的地方压住，保证搜索栏可读）
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        0f to Color(0x66000000),
+                        0.30f to Color(0x22000000),
+                        1f to Color(0x00000000)
                     )
                 )
             )
@@ -241,7 +252,7 @@ fun MagsApp() {
                     Box(
                         Modifier.weight(1f).height(50.dp)
                             .clip(RoundedCornerShape(25.dp))
-                            .background(Color(0x1FFFFFFF))
+                            .background(Color(0x3DFFFFFF))
                             .padding(horizontal = 18.dp),
                         contentAlignment = Alignment.CenterStart
                     ) {
@@ -326,11 +337,11 @@ fun MagsApp() {
                                     ) else Modifier
                                 )
                                 .clip(RoundedCornerShape(19.dp))
-                                .background(if (on) Color.Transparent else Color(0x14FFFFFF))
+                                .background(if (on) Color.Transparent else Color(0x2EFFFFFF))
                                 .clickable { sort = k; runSearch(query, k, 1) }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                         ) {
-                            BasicText(label, style = ts(13f, if (on) Color.White else Color(0xAAFFFFFF),
+                            BasicText(label, style = ts(13f, if (on) Color.White else Color(0xE6E8EEFF),
                                 if (on) FontWeight.Bold else FontWeight.Normal))
                         }
                     }
@@ -543,7 +554,7 @@ fun MagsApp() {
 private fun PillText(txt: String) {
     Box(
         Modifier.clip(RoundedCornerShape(11.dp))
-            .background(Color(0x1FFFFFFF))
+            .background(Color(0x33FFFFFF))
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
         BasicText(txt, style = ts(11.5f, Color(0xDDE0F2FE)))
