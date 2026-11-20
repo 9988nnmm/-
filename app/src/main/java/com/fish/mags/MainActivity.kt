@@ -1,5 +1,6 @@
 package com.fish.mags
 
+import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -24,6 +25,9 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.toArgb
+import androidx.palette.graphics.Palette
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import com.fish.mags.glass.R
@@ -103,6 +107,26 @@ suspend fun doSearch(q: String, sort: String, page: Int): Pair<List<Item>, JSONO
 
 // ---------------- UI ----------------
 
+/**
+ * 从背景图里取出强调色 —— 和 Flowmix 一样"跟随壁纸"。
+ * 优先鲜艳色，取不到就退回亮色/主色；再兜底保证够亮、够饱和，
+ * 免得在一张暗色壁纸上发光发不出来。
+ */
+private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
+    val fallback = 0xFFFFD60A.toInt()
+    if (bitmap == null) return Color(fallback)
+    val p = Palette.from(bitmap).clearFilters().generate()
+    val raw = p.vibrantSwatch?.rgb
+        ?: p.lightVibrantSwatch?.rgb
+        ?: p.dominantSwatch?.rgb
+        ?: fallback
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(raw, hsv)
+    hsv[1] = maxOf(hsv[1], 0.52f)   // 别太灰
+    hsv[2] = maxOf(hsv[2], 0.88f)   // 别太暗，要能当发光色
+    return Color(android.graphics.Color.HSVToColor(hsv))
+}
+
 private fun ts(size: Float, color: Color = Color.White, weight: FontWeight = FontWeight.Normal) =
     TextStyle(color = color, fontSize = size.sp, fontWeight = weight)
 
@@ -136,6 +160,7 @@ fun MagsApp() {
     var favs by remember { mutableStateOf(listOf<Item>()) }
     var favBusy by remember { mutableStateOf(false) }
     var favMsg by remember { mutableStateOf("") }
+    var accent by remember { mutableStateOf(Color(0xFFFFD60A)) }   // 跟随壁纸的强调色
 
     fun runSearch(q: String, s: String, p: Int) {
         if (q.isBlank()) return
@@ -181,6 +206,13 @@ fun MagsApp() {
     }
 
     LaunchedEffect(Unit) {
+        // 从背景图提取强调色（Flowmix 那种"跟随壁纸"）
+        try {
+            val bmp = withContext(Dispatchers.IO) {
+                BitmapFactory.decodeResource(ctx.resources, R.drawable.bg)
+            }
+            accent = pickAccent(bmp)
+        } catch (_: Exception) { }
         try {
             val o = api("/api/chan")
             chan = if (o.optBoolean("proxy")) "代理 " + o.optString("addr").substringAfterLast(":")
@@ -344,13 +376,13 @@ fun MagsApp() {
                                     Modifier.weight(1f).fillMaxHeight()
                                         .drawBehind {
                                             if (!on) return@drawBehind
-                                            // 选中项：椭圆暖光从中心向外扩散
+                                            // 选中项：椭圆光晕，颜色取自壁纸
                                             drawRect(
                                                 brush = Brush.radialGradient(
                                                     colors = listOf(
-                                                        Color(0x5CFFD60A),
-                                                        Color(0x24FFD60A),
-                                                        Color(0x00FFD60A)
+                                                        accent.copy(alpha = 0.40f),
+                                                        accent.copy(alpha = 0.16f),
+                                                        accent.copy(alpha = 0f)
                                                     ),
                                                     center = center,
                                                     radius = size.maxDimension * 0.95f
@@ -361,7 +393,7 @@ fun MagsApp() {
                                         .then(
                                             if (on) Modifier.border(
                                                 1.dp,
-                                                Color(0x99FFD60A),
+                                                accent.copy(alpha = 0.62f),
                                                 RoundedCornerShape(20.dp)
                                             ) else Modifier
                                         )
@@ -372,7 +404,8 @@ fun MagsApp() {
                                         label,
                                         style = ts(
                                             13.5f,
-                                            if (on) Color(0xFFFFE066) else Color(0xE6E8EEFF),
+                                            if (on) accent.copy(alpha = 0.30f).compositeOver(Color.White)
+                                            else Color(0xE6E8EEFF),
                                             if (on) FontWeight.Bold else FontWeight.Medium
                                         )
                                     )
