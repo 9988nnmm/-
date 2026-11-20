@@ -20,6 +20,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -421,8 +423,8 @@ fun MagsApp() {
                             .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(23.dp))
                             // 一个手势区同时处理：原地松手=点击，拖动=跟手
                             .pointerInput(tabPx) {
-                                androidx.compose.foundation.gestures.awaitEachGesture {
-                                    val down = androidx.compose.foundation.gestures.awaitFirstDown(
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(
                                         requireUnconsumed = false
                                     )
                                     val startX = down.position.x
