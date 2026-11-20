@@ -559,27 +559,31 @@ fun MagsApp() {
                                     }
                                     dragging = false
                                     if (!moved) {
-                                        // 四舍五入到最近的选项，避免点在中缝时跳到隔壁
+                                        // 只提交状态；动画由 LaunchedEffect(idx) 统一驱动，
+                                        // 否则两个 animateTo 会互相打断 → 指示器来回抖。
                                         commit(
                                             (startX / tabPx - 0.5f).roundToInt()
                                                 .coerceIn(0, opts.size - 1)
                                         )
-                                        scope.launch {
-                                            slide.animateTo(
-                                                idx.toFloat(),
-                                                spring(dampingRatio = 0.72f, stiffness = 420f)
-                                            )
-                                        }
                                     } else {
                                         val target = dragPos.roundToInt()
                                             .coerceIn(0, opts.size - 1)
+                                        val willChange = opts[target].first != sort
                                         commit(target)
                                         scope.launch {
+                                            // 先对齐到手指松开的位置，再吸附
                                             slide.snapTo(dragPos)
-                                            slide.animateTo(
-                                                target.toFloat(),
-                                                spring(dampingRatio = 0.68f, stiffness = 360f)
-                                            )
+                                            if (!willChange) {
+                                                // 没换项时不会有 LaunchedEffect 动画，这里补上
+                                                slide.animateTo(
+                                                    target.toFloat(),
+                                                    spring(dampingRatio = 0.68f, stiffness = 360f)
+                                                )
+                                            }
+                                        }
+                                        if (willChange) {
+                                            // 交给 LaunchedEffect(idx) 做，避免双重动画
+                                            dragging = true
                                         }
                                     }
                                 }
