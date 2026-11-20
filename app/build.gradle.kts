@@ -5,15 +5,15 @@ plugins {
 }
 
 android {
-    namespace = "com.fish.mags"
+    namespace = "com.fish.mags.glass"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.fish.mags"
+        applicationId = "com.fish.mags.glass"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1-probe"
+        versionName = "0.2-probe"
     }
     buildTypes {
         release { isMinifyEnabled = false }
