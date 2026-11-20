@@ -30,7 +30,7 @@ kotlin {
 }
 
 dependencies {
-    implementation("io.github.kyant0:backdrop:2.0.1")
+    implementation("io.github.kyant0:backdrop:2.0.0-alpha03")
     implementation("org.jetbrains.compose.ui:ui:1.12.0")
     implementation("org.jetbrains.compose.foundation:foundation:1.12.0")
     implementation("org.jetbrains.compose.ui:ui-graphics:1.12.0")
