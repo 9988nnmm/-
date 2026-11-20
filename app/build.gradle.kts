@@ -6,18 +6,16 @@ plugins {
 
 android {
     namespace = "com.fish.mags.glass"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.fish.mags.glass"
-        minSdk = 26
-        targetSdk = 35
-        versionCode = 1
-        versionName = "0.2-probe"
+        minSdk = 33
+        targetSdk = 36
+        versionCode = 3
+        versionName = "0.3-glass"
     }
-    buildTypes {
-        release { isMinifyEnabled = false }
-    }
+    buildTypes { release { isMinifyEnabled = false } }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -27,10 +25,9 @@ android {
 }
 
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("io.github.kyant0:backdrop:2.0.1")
+    implementation("org.jetbrains.compose.ui:ui:1.12.0")
+    implementation("org.jetbrains.compose.foundation:foundation:1.12.0")
+    implementation("org.jetbrains.compose.ui:ui-graphics:1.12.0")
+    implementation("androidx.activity:activity-compose:1.10.1")
 }
