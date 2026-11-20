@@ -374,31 +374,26 @@ fun MagsApp() {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         hist.take(3).forEach { hq ->
-                            // 整个胶囊只负责「搜索」；× 是独立的小圆按钮叠在右边
-                            Box(
+                            // 胶囊 = 左半「搜索」 + 右半「×」，两个并排独立可点，不嵌套
+                            Row(
                                 Modifier
                                     .clip(RoundedCornerShape(13.dp))
-                                    .background(Color(0x26FFFFFF))
+                                    .background(Color(0x26FFFFFF)),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
+                                Box(
                                     Modifier
                                         .clickable {
                                             input = hq
                                             query = hq
                                             runSearch(hq, sort, 1)
                                         }
-                                        .padding(start = 11.dp, end = 28.dp, top = 6.dp, bottom = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp)
                                 ) {
                                     BasicText(hq.take(8), style = ts(12f, Color(0xD9E8EEFF)))
                                 }
                                 Box(
                                     Modifier
-                                        .align(Alignment.CenterEnd)
-                                        .padding(end = 4.dp)
-                                        .size(20.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(Color(0x14FFFFFF))
                                         .clickable {
                                             scope.launch {
                                                 try {
@@ -410,18 +405,19 @@ fun MagsApp() {
                                                     hist = if (a == null) emptyList()
                                                            else (0 until a.length())
                                                                .map { a.getString(it) }
-                                                    Toast.makeText(ctx, "已删除", Toast.LENGTH_SHORT).show()
+                                                               .filter { it.isNotBlank() && it != "*" }
+                                                    Toast.makeText(ctx, "已删除「$hq」", Toast.LENGTH_SHORT).show()
                                                 } catch (e: Exception) {
-                                                    Toast.makeText(ctx, "删除失败", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(ctx, "删除失败：" + (e.message ?: ""), Toast.LENGTH_SHORT).show()
                                                 }
                                             }
-                                        },
+                                        }
+                                        .padding(start = 4.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    BasicText("×", style = ts(13f, Color(0xCCFFFFFF)))
+                                    BasicText("×", style = ts(14f, Color(0xCCFFFFFF), FontWeight.Medium))
                                 }
                             }
-                        }
                         Spacer(Modifier.weight(1f))
                         BasicText(
                             "清空",
