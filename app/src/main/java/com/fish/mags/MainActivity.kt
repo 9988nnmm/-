@@ -94,8 +94,8 @@ suspend fun doSearch(q: String, sort: String, page: Int): Pair<List<Item>, JSONO
 
 // ---------------- UI ----------------
 
-private fun ts(size: Float, color: Color = Color.White, w: FontWeight = FontWeight.Normal) =
-    TextStyle(color = color, fontSize = size.sp, fontWeight = w)
+private fun ts(size: Float, color: Color = Color.White, weight: FontWeight = FontWeight.Normal) =
+    TextStyle(color = color, fontSize = size.sp, fontWeight = weight)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(s: Bundle?) {
