@@ -327,9 +327,16 @@ fun MagsApp() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         Modifier.weight(1f).height(46.dp)
+                            .drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { RoundedCornerShape(23.dp) },
+                                effects = {
+                                    vibrancy()
+                                    blur(5.dp.toPx())
+                                    lens(8.dp.toPx(), 16.dp.toPx())
+                                }
+                            )
                             .clip(RoundedCornerShape(23.dp))
-                            .background(Color(0x4D101828))
-                            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(23.dp))
                             .padding(horizontal = 18.dp),
                         contentAlignment = Alignment.CenterStart
                     ) {
