@@ -33,6 +33,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -431,9 +432,7 @@ fun MagsApp() {
                                                            else (0 until a.length())
                                                                .map { a.getString(it) }
                                                                .filter { it.isNotBlank() && it != "*" }
-                                                    Toast.makeText(ctx, "已删除「$hq」", Toast.LENGTH_SHORT).show()
                                                 } catch (e: Exception) {
-                                                    Toast.makeText(ctx, "删除失败：" + (e.message ?: ""), Toast.LENGTH_SHORT).show()
                                                 }
                                             }
                                         }
@@ -465,9 +464,7 @@ fun MagsApp() {
                                             try {
                                                 api("/api/delhist?q=*")
                                                 hist = emptyList()
-                                                Toast.makeText(ctx, "已清空搜索记录", Toast.LENGTH_SHORT).show()
                                             } catch (e: Exception) {
-                                                Toast.makeText(ctx, "清空失败", Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     }
@@ -485,13 +482,15 @@ fun MagsApp() {
                     Spacer(Modifier.weight(1f))
                     if (loading) BasicText("搜索中…", style = ts(12.5f, Color(0xCCBFDBFE)))
                     Spacer(Modifier.width(8.dp))
+                    val favIr = remember { MutableInteractionSource() }
                     Box(
-                        Modifier.drawBackdrop(
-                            backdrop = backdrop,
-                            shape = { RoundedCornerShape(13.dp) },
-                            effects = { vibrancy(); blur(2.dp.toPx()); lens(6.dp.toPx(), 12.dp.toPx()) }
-                        ).clip(RoundedCornerShape(13.dp))
-                            .clickable {
+                        Modifier.pressBounce(favIr, 0.93f)
+                            .drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { RoundedCornerShape(13.dp) },
+                                effects = { vibrancy(); blur(2.dp.toPx()); lens(6.dp.toPx(), 12.dp.toPx()) }
+                                ).clip(RoundedCornerShape(13.dp))
+                            .clickable(interactionSource = favIr, indication = null) {
                                 if (screen == "favs") screen = "list"
                                 else { screen = "favs"; loadFavs() }
                             }
@@ -666,14 +665,11 @@ fun MagsApp() {
                             )
                             .clip(RoundedCornerShape(21.dp))
                             .clickable(enabled = favs.isNotEmpty()) {
-                                Toast.makeText(ctx, "正在批量投递…", Toast.LENGTH_SHORT).show()
                                 scope.launch {
                                     try {
                                         val o = api("/api/addall")
-                                        Toast.makeText(ctx, o.optString("msg"), Toast.LENGTH_LONG).show()
                                         loadFavs()
                                     } catch (e: Exception) {
-                                        Toast.makeText(ctx, "批量投递失败", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             },
@@ -721,7 +717,6 @@ fun MagsApp() {
                                     backdrop, it, idx,
                                     onCopy = {
                                         clip.setText(AnnotatedString(it.magnet))
-                                        Toast.makeText(ctx, "磁力链接已复制", Toast.LENGTH_SHORT).show()
                                     },
                                     onFav = {
                                         scope.launch {
@@ -729,12 +724,10 @@ fun MagsApp() {
                                                 api("/api/fav?h=" + it.hash)
                                                 loadFavs()
                                             } catch (e: Exception) {
-                                                Toast.makeText(ctx, "操作失败", Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     },
                                     onSub = {
-                                        Toast.makeText(ctx, "正在检查字幕…", Toast.LENGTH_SHORT).show()
                                         scope.launch {
                                             try {
                                                 val o = api("/api/sub?h=" + it.hash)
@@ -745,7 +738,6 @@ fun MagsApp() {
                                         }
                                     },
                                     onAdd = {
-                                        Toast.makeText(ctx, "正在投递光鸭…", Toast.LENGTH_SHORT).show()
                                         scope.launch {
                                             try {
                                                 val o = api("/api/add?h=" + it.hash)
@@ -754,7 +746,6 @@ fun MagsApp() {
                                                 favs = favs.toMutableList().also { l ->
                                                     l[idx] = l[idx].copy(added = ok, note = if (ok) msg else "投递失败")
                                                 }
-                                                Toast.makeText(ctx, if (ok) "已投递光鸭" else msg, Toast.LENGTH_LONG).show()
                                             } catch (e: Exception) { }
                                         }
                                     }
@@ -776,7 +767,6 @@ fun MagsApp() {
                                 backdrop, it, idx,
                                 onCopy = {
                                     clip.setText(AnnotatedString(it.magnet))
-                                    Toast.makeText(ctx, "磁力链接已复制", Toast.LENGTH_SHORT).show()
                                 },
                                 onFav = {
                                     scope.launch {
@@ -787,12 +777,10 @@ fun MagsApp() {
                                                 l[idx] = l[idx].copy(fav = on)
                                             }
                                         } catch (e: Exception) {
-                                            Toast.makeText(ctx, "操作失败", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
                                 onSub = {
-                                    Toast.makeText(ctx, "正在检查字幕…", Toast.LENGTH_SHORT).show()
                                     scope.launch {
                                         try {
                                             val o = api("/api/sub?h=" + it.hash)
@@ -804,12 +792,10 @@ fun MagsApp() {
                                                 l[idx] = l[idx].copy(note = msg)
                                             }
                                         } catch (e: Exception) {
-                                            Toast.makeText(ctx, "查字幕失败", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 },
                                 onAdd = {
-                                    Toast.makeText(ctx, "正在投递光鸭…", Toast.LENGTH_SHORT).show()
                                     scope.launch {
                                         try {
                                             val o = api("/api/add?h=" + it.hash)
@@ -818,9 +804,7 @@ fun MagsApp() {
                                             items = items.toMutableList().also { l ->
                                                 l[idx] = l[idx].copy(added = ok, note = if (ok) msg else "投递失败")
                                             }
-                                            Toast.makeText(ctx, if (ok) "已投递光鸭" else msg, Toast.LENGTH_LONG).show()
                                         } catch (e: Exception) {
-                                            Toast.makeText(ctx, "投递失败", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 }
@@ -883,6 +867,7 @@ private fun PagBtn(label: String, enabled: Boolean, onClick: () -> Unit) {
         style = ts(13.5f, if (enabled) Color(0xFFBAE6FD) else Color(0x44FFFFFF),
             if (enabled) FontWeight.SemiBold else FontWeight.Normal),
         modifier = Modifier
+            .pressBounce(remember { MutableInteractionSource() }, 0.9f)
             .clip(RoundedCornerShape(14.dp))
             .clickable(enabled = enabled) { onClick() }
             .padding(horizontal = 14.dp, vertical = 8.dp)
@@ -966,13 +951,20 @@ private fun ActionBtn(backdrop: LayerBackdrop, label: String, primary: Boolean, 
             .clickable(interactionSource = ir, indication = null) { onClick() }
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
-        BasicText(
-            label,
-            style = ts(
-                12.5f,
-                if (primary) Color.White else Color(0xF2E4ECFF),
-                if (primary) FontWeight.Bold else FontWeight.Medium
+        // 文字切换（收藏 → 已收藏）走淡入淡出，不要"啪"一下换掉
+        Crossfade(
+            targetState = label,
+            animationSpec = tween(durationMillis = 220),
+            label = "actionLabel"
+        ) { txt ->
+            BasicText(
+                txt,
+                style = ts(
+                    12.5f,
+                    if (primary) Color.White else Color(0xF2E4ECFF),
+                    if (primary) FontWeight.Bold else FontWeight.Medium
+                )
             )
-        )
+        }
     }
 }
