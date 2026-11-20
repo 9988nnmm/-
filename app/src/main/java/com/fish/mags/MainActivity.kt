@@ -319,7 +319,11 @@ fun MagsApp() {
                     .drawBackdrop(
                         backdrop = backdrop,
                         shape = { RoundedCornerShape(0.dp, 0.dp, 24.dp, 24.dp) },
-                        effects = { vibrancy(); blur(6.dp.toPx()) }
+                        effects = { vibrancy(); blur(6.dp.toPx()) },
+                        // 贴屏幕边的那三边不要高光，否则会看到一条白线
+                        highlight = {
+                            com.kyant.backdrop.highlight.Highlight.Default.copy(alpha = 0f)
+                        }
                     )
                     .padding(start = 16.dp, end = 16.dp, top = 46.dp, bottom = 10.dp)
             ) {
@@ -327,16 +331,9 @@ fun MagsApp() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         Modifier.weight(1f).height(46.dp)
-                            .drawBackdrop(
-                                backdrop = backdrop,
-                                shape = { RoundedCornerShape(23.dp) },
-                                effects = {
-                                    vibrancy()
-                                    blur(5.dp.toPx())
-                                    lens(8.dp.toPx(), 16.dp.toPx())
-                                }
-                            )
                             .clip(RoundedCornerShape(23.dp))
+                            .background(Color(0x4D101828))
+                            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(23.dp))
                             .padding(horizontal = 18.dp),
                         contentAlignment = Alignment.CenterStart
                     ) {
