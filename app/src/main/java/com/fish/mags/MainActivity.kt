@@ -201,7 +201,9 @@ fun MagsApp() {
                 try {
                     val h = api("/api/hist")
                     val ha = h.optJSONArray("items")
-                    if (ha != null) hist = (0 until ha.length()).map { ha.getString(it) }
+                    if (ha != null) hist = (0 until ha.length())
+                        .map { ha.getString(it) }
+                        .filter { it.isNotBlank() && it != "*" }
                 } catch (_: Exception) { }
                 val ea = o.optJSONArray("errors")
                 errors = if (ea == null) emptyList() else (0 until ea.length()).map { ea.getString(it) }
@@ -247,7 +249,9 @@ fun MagsApp() {
         try {
             val h = api("/api/hist")
             val arr = h.optJSONArray("items")
-            if (arr != null) hist = (0 until arr.length()).map { arr.getString(it) }
+            if (arr != null) hist = (0 until arr.length())
+                .map { arr.getString(it) }
+                .filter { it.isNotBlank() && it != "*" }
         } catch (_: Exception) { }
         try {
             val o = api("/api/chan")
@@ -692,7 +696,7 @@ fun MagsApp() {
                         favs.isEmpty() -> CenterHint("还没有收藏\n在搜索结果里点「☆ 收藏」就会出现在这里")
                         else -> LazyColumn(
                             Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 90.dp),
+                            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 104.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             item {
@@ -751,7 +755,7 @@ fun MagsApp() {
                     items.isEmpty() -> CenterHint("没结果，换个关键词试试")
                     else -> LazyColumn(
                         Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 90.dp),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 104.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         itemsIndexed(items) { idx, it ->
