@@ -181,6 +181,7 @@ fun MagsApp() {
     var favBusy by remember { mutableStateOf(false) }
     var favMsg by remember { mutableStateOf("") }
     var accent by remember { mutableStateOf(Color(0xFFFFD60A)) }   // 跟随壁纸的强调色
+    var hist by remember { mutableStateOf(listOf<String>()) }
 
     fun runSearch(q: String, s: String, p: Int) {
         if (q.isBlank()) return
@@ -192,6 +193,11 @@ fun MagsApp() {
                 total = o.optInt("total")
                 pages = o.optInt("pages", 1)
                 page = o.optInt("page", 1)
+                try {
+                    val h = api("/api/hist")
+                    val ha = h.optJSONArray("items")
+                    if (ha != null) hist = (0 until ha.length()).map { ha.getString(it) }
+                } catch (_: Exception) { }
                 val ea = o.optJSONArray("errors")
                 errors = if (ea == null) emptyList() else (0 until ea.length()).map { ea.getString(it) }
             } catch (e: Exception) {
@@ -232,6 +238,11 @@ fun MagsApp() {
                 BitmapFactory.decodeResource(ctx.resources, R.drawable.bg)
             }
             accent = pickAccent(bmp)
+        } catch (_: Exception) { }
+        try {
+            val h = api("/api/hist")
+            val arr = h.optJSONArray("items")
+            if (arr != null) hist = (0 until arr.length()).map { arr.getString(it) }
         } catch (_: Exception) { }
         try {
             val o = api("/api/chan")
@@ -299,8 +310,17 @@ fun MagsApp() {
                         shape = { RoundedCornerShape(0.dp, 0.dp, 28.dp, 28.dp) },
                         effects = { vibrancy(); blur(2.dp.toPx()); lens(10.dp.toPx(), 18.dp.toPx()) }
                     )
-                    .padding(start = 16.dp, end = 16.dp, top = 34.dp, bottom = 14.dp)
+                    .padding(start = 16.dp, end = 16.dp, top = 42.dp, bottom = 12.dp)
             ) {
+                // 顶部标题（下移搜索栏，同时把顶部留白填上）
+                BasicText(
+                    "肥鱼搜",
+                    style = ts(18f, Color(0xE6FFFFFF), FontWeight.Medium),
+                    modifier = Modifier.fillMaxWidth(),
+                    // 居中：BasicText 支持 textAlign 通过 style
+                )
+                Spacer(Modifier.height(16.dp))
+
                 // 搜索框
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
@@ -342,6 +362,34 @@ fun MagsApp() {
                         contentAlignment = Alignment.Center
                     ) {
                         BasicText("搜索", style = ts(15f, weight = FontWeight.Bold))
+                    }
+                }
+
+                // 搜索历史
+                if (hist.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        hist.take(4).forEach { hq ->
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(13.dp))
+                                    .background(Color(0x26FFFFFF))
+                                    .clickable {
+                                        input = hq
+                                        query = hq
+                                        runSearch(hq, sort, 1)
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                BasicText(
+                                    hq.take(12),
+                                    style = ts(12f, Color(0xD9E8EEFF))
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -441,12 +489,11 @@ fun MagsApp() {
                                         totalDx += dx
                                         if (moved) {
                                             ch.consume()
-                                            scope.launch {
-                                                slide.snapTo(
-                                                    (startIdx + totalDx / tabPx)
-                                                        .coerceIn(0f, last)
-                                                )
-                                            }
+                                            // 直接在这里 suspend 调用，避免每帧新建协程
+                                            slide.snapTo(
+                                                (startIdx + totalDx / tabPx)
+                                                    .coerceIn(0f, last)
+                                            )
                                         }
                                     }
                                     dragging = false
