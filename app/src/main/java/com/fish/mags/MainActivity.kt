@@ -436,7 +436,7 @@ fun MagsApp() {
                                         val ev = awaitPointerEvent()
                                         val ch = ev.changes.firstOrNull() ?: break
                                         if (!ch.pressed) break
-                                        val dx = ch.positionChange().x
+                                        val dx = ch.position.x - ch.previousPosition.x
                                         if (!moved && kotlin.math.abs(totalDx + dx) > 6f) moved = true
                                         totalDx += dx
                                         if (moved) {
