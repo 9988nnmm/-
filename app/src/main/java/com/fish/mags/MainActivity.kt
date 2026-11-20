@@ -463,6 +463,50 @@ fun MagsApp() {
             }
         }
 
+        // ---- 收藏夹：一键投光鸭 ----
+        if (screen == "favs" && favs.isNotEmpty()) {
+            Box(
+                Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { RoundedCornerShape(26.dp, 26.dp, 0.dp, 0.dp) },
+                        effects = { vibrancy(); blur(2.dp.toPx()); lens(10.dp.toPx(), 18.dp.toPx()) }
+                    )
+                    .padding(horizontal = 18.dp, vertical = 13.dp)
+                    .navigationBarsPadding(),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    Modifier.fillMaxWidth().height(48.dp)
+                        .drawBackdrop(
+                            backdrop = backdrop,
+                            shape = { RoundedCornerShape(24.dp) },
+                            effects = { vibrancy(); blur(2.dp.toPx()); lens(8.dp.toPx(), 16.dp.toPx()) }
+                        )
+                        .clip(RoundedCornerShape(24.dp))
+                        .clickable {
+                            Toast.makeText(ctx, "正在批量投递…", Toast.LENGTH_SHORT).show()
+                            scope.launch {
+                                try {
+                                    val o = api("/api/addall")
+                                    Toast.makeText(ctx, o.optString("msg"), Toast.LENGTH_LONG).show()
+                                    loadFavs()
+                                } catch (e: Exception) {
+                                    Toast.makeText(ctx, "批量投递失败", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    BasicText(
+                        "一键投光鸭（${favs.size} 条）",
+                        style = ts(14.5f, Color.White, FontWeight.Bold)
+                    )
+                }
+            }
+        }
+
         // ---- 底部分页（悬浮玻璃条） ----
         if (items.isNotEmpty() && screen == "list") {
             Row(
