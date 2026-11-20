@@ -319,28 +319,8 @@ fun MagsApp() {
                         shape = { RoundedCornerShape(0.dp, 0.dp, 24.dp, 24.dp) },
                         effects = { vibrancy(); blur(6.dp.toPx()) }
                     )
-                    .padding(start = 16.dp, end = 16.dp, top = 42.dp, bottom = 12.dp)
+                    .padding(start = 16.dp, end = 16.dp, top = 46.dp, bottom = 10.dp)
             ) {
-                // 顶部标题（下移搜索栏，同时把顶部留白填上）
-                BasicText(
-                    "肥鱼搜",
-                    style = TextStyle(
-                        fontFamily = Smiley,
-                        fontSize = 30.sp,
-                        fontWeight = FontWeight.Normal,
-                        letterSpacing = 6.sp,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        brush = Brush.linearGradient(
-                            0f to Color(0xFFFFE3F0),
-                            0.35f to Color(0xFFFFFFFF),
-                            0.7f to Color(0xFFE9D9FF),
-                            1f to accent.copy(alpha = 0.85f)
-                        )
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(16.dp))
-
                 // 搜索框
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
@@ -407,7 +387,7 @@ fun MagsApp() {
                                             query = hq
                                             runSearch(hq, sort, 1)
                                         }
-                                        .padding(start = 12.dp, end = 30.dp, top = 7.dp, bottom = 7.dp),
+                                        .padding(start = 11.dp, end = 28.dp, top = 6.dp, bottom = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     BasicText(hq.take(8), style = ts(12f, Color(0xD9E8EEFF)))
@@ -566,7 +546,11 @@ fun MagsApp() {
                                     }
                                     dragging = false
                                     if (!moved) {
-                                        commit((startX / tabPx).toInt())
+                                        // 四舍五入到最近的选项，避免点在中缝时跳到隔壁
+                                        commit(
+                                            (startX / tabPx - 0.5f).roundToInt()
+                                                .coerceIn(0, opts.size - 1)
+                                        )
                                         scope.launch {
                                             slide.animateTo(
                                                 idx.toFloat(),
