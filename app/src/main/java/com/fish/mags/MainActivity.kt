@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -321,29 +323,61 @@ fun MagsApp() {
 
             // ---- 排序栏 / 收藏夹的一键投光鸭 ----
             if (screen == "list") {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // 整体一个玻璃胶囊，内部选项平铺；选中项黄色发光
+                Box(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+                        .height(48.dp)
+                        .drawBackdrop(
+                            backdrop = backdrop,
+                            shape = { RoundedCornerShape(24.dp) },
+                            effects = { vibrancy(); blur(3.dp.toPx()); lens(9.dp.toPx(), 18.dp.toPx()) }
+                        )
+                        .clip(RoundedCornerShape(24.dp))
+                        .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(24.dp))
+                        .padding(4.dp)
                 ) {
-                    listOf("seed" to "种子", "size" to "大小", "date" to "时间", "name" to "名称").forEach { (k, label) ->
-                        val on = sort == k
-                        Box(
-                            Modifier
-                                .then(
-                                    if (on) Modifier.drawBackdrop(
-                                        backdrop = backdrop,
-                                        shape = { RoundedCornerShape(19.dp) },
-                                        effects = { vibrancy(); blur(2.dp.toPx()); lens(7.dp.toPx(), 14.dp.toPx()) }
-                                    ) else Modifier
-                                )
-                                .clip(RoundedCornerShape(19.dp))
-                                .background(if (on) Color.Transparent else Color(0x2EFFFFFF))
-                                .clickable { sort = k; runSearch(query, k, 1) }
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            BasicText(label, style = ts(13f, if (on) Color.White else Color(0xE6E8EEFF),
-                                if (on) FontWeight.Bold else FontWeight.Normal))
-                        }
+                    Row(Modifier.fillMaxSize()) {
+                        listOf("seed" to "种子", "size" to "大小", "date" to "时间", "name" to "名称")
+                            .forEach { (k, label) ->
+                                val on = sort == k
+                                Box(
+                                    Modifier.weight(1f).fillMaxHeight()
+                                        .drawBehind {
+                                            if (!on) return@drawBehind
+                                            // 选中项：椭圆暖光从中心向外扩散
+                                            drawRect(
+                                                brush = Brush.radialGradient(
+                                                    colors = listOf(
+                                                        Color(0x5CFFD60A),
+                                                        Color(0x24FFD60A),
+                                                        Color(0x00FFD60A)
+                                                    ),
+                                                    center = center,
+                                                    radius = size.maxDimension * 0.95f
+                                                )
+                                            )
+                                        }
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .then(
+                                            if (on) Modifier.border(
+                                                1.dp,
+                                                Color(0x99FFD60A),
+                                                RoundedCornerShape(20.dp)
+                                            ) else Modifier
+                                        )
+                                        .clickable { sort = k; runSearch(query, k, 1) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    BasicText(
+                                        label,
+                                        style = ts(
+                                            13.5f,
+                                            if (on) Color(0xFFFFE066) else Color(0xE6E8EEFF),
+                                            if (on) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    )
+                                }
+                            }
                     }
                 }
             } else {
