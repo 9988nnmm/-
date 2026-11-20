@@ -44,6 +44,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.palette.graphics.Palette
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import com.fish.mags.glass.R
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -146,6 +148,9 @@ private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
     hsv[2] = maxOf(hsv[2], 0.88f)   // 别太暗，要能当发光色
     return Color(android.graphics.Color.HSVToColor(hsv))
 }
+
+// 得意黑（Smiley Sans）—— 免费可商用，倾斜异形
+val Smiley = FontFamily(Font(R.font.smiley))
 
 private fun ts(size: Float, color: Color = Color.White, weight: FontWeight = FontWeight.Normal) =
     TextStyle(color = color, fontSize = size.sp, fontWeight = weight)
@@ -307,8 +312,8 @@ fun MagsApp() {
                 Modifier.fillMaxWidth()
                     .drawBackdrop(
                         backdrop = backdrop,
-                        shape = { RoundedCornerShape(0.dp, 0.dp, 28.dp, 28.dp) },
-                        effects = { vibrancy(); blur(2.dp.toPx()); lens(10.dp.toPx(), 18.dp.toPx()) }
+                        shape = { RoundedCornerShape(0.dp, 0.dp, 24.dp, 24.dp) },
+                        effects = { vibrancy(); blur(6.dp.toPx()) }
                     )
                     .padding(start = 16.dp, end = 16.dp, top = 42.dp, bottom = 12.dp)
             ) {
@@ -316,10 +321,10 @@ fun MagsApp() {
                 BasicText(
                     "肥鱼搜",
                     style = TextStyle(
-                        fontSize = 25.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                        letterSpacing = 4.sp,
+                        fontFamily = Smiley,
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.Normal,
+                        letterSpacing = 6.sp,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         brush = Brush.linearGradient(
                             0f to Color(0xFFFFE3F0),
@@ -335,8 +340,8 @@ fun MagsApp() {
                 // 搜索框
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
-                        Modifier.weight(1f).height(50.dp)
-                            .clip(RoundedCornerShape(25.dp))
+                        Modifier.weight(1f).height(46.dp)
+                            .clip(RoundedCornerShape(23.dp))
                             .background(Color(0x3DFFFFFF))
                             .padding(horizontal = 18.dp),
                         contentAlignment = Alignment.CenterStart
@@ -360,10 +365,10 @@ fun MagsApp() {
                     }
                     Spacer(Modifier.width(10.dp))
                     Box(
-                        Modifier.height(50.dp).width(74.dp)
+                        Modifier.height(46.dp).width(70.dp)
                             .drawBackdrop(
                                 backdrop = backdrop,
-                                shape = { RoundedCornerShape(25.dp) },
+                                shape = { RoundedCornerShape(23.dp) },
                                 effects = { vibrancy(); blur(2.dp.toPx()); lens(9.dp.toPx(), 18.dp.toPx()) }
                             )
                             .clickable {
@@ -385,38 +390,52 @@ fun MagsApp() {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         hist.take(3).forEach { hq ->
-                            Row(
+                            // 整个胶囊只负责「搜索」；× 是独立的小圆按钮叠在右边
+                            Box(
                                 Modifier
                                     .clip(RoundedCornerShape(13.dp))
                                     .background(Color(0x26FFFFFF))
-                                    .clickable {
-                                        input = hq
-                                        query = hq
-                                        runSearch(hq, sort, 1)
-                                    }
-                                    .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                BasicText(hq.take(9), style = ts(12f, Color(0xD9E8EEFF)))
-                                Spacer(Modifier.width(4.dp))
-                                BasicText(
-                                    "×",
-                                    style = ts(14f, Color(0x99FFFFFF)),
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(9.dp))
+                                Row(
+                                    Modifier
+                                        .clickable {
+                                            input = hq
+                                            query = hq
+                                            runSearch(hq, sort, 1)
+                                        }
+                                        .padding(start = 12.dp, end = 30.dp, top = 7.dp, bottom = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    BasicText(hq.take(8), style = ts(12f, Color(0xD9E8EEFF)))
+                                }
+                                Box(
+                                    Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .padding(end = 4.dp)
+                                        .size(20.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0x14FFFFFF))
                                         .clickable {
                                             scope.launch {
                                                 try {
-                                                    val o = api("/api/delhist?q=" +
-                                                        URLEncoder.encode(hq, "UTF-8"))
+                                                    val o = api(
+                                                        "/api/delhist?q=" +
+                                                        URLEncoder.encode(hq, "UTF-8")
+                                                    )
                                                     val a = o.optJSONArray("items")
                                                     hist = if (a == null) emptyList()
-                                                           else (0 until a.length()).map { a.getString(it) }
-                                                } catch (_: Exception) { }
+                                                           else (0 until a.length())
+                                                               .map { a.getString(it) }
+                                                    Toast.makeText(ctx, "已删除", Toast.LENGTH_SHORT).show()
+                                                } catch (e: Exception) {
+                                                    Toast.makeText(ctx, "删除失败", Toast.LENGTH_SHORT).show()
+                                                }
                                             }
-                                        }
-                                        .padding(horizontal = 5.dp, vertical = 1.dp)
-                                )
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    BasicText("×", style = ts(13f, Color(0xCCFFFFFF)))
+                                }
                             }
                         }
                         Spacer(Modifier.weight(1f))
@@ -800,14 +819,17 @@ fun MagsApp() {
         if (items.isNotEmpty() && screen == "list") {
             Row(
                 Modifier.align(Alignment.BottomCenter)
-                    .fillMaxWidth()
+                    .padding(horizontal = 46.dp, vertical = 14.dp)
+                    .navigationBarsPadding()
+                    .height(44.dp)
                     .drawBackdrop(
                         backdrop = backdrop,
-                        shape = { RoundedCornerShape(26.dp, 26.dp, 0.dp, 0.dp) },
-                        effects = { vibrancy(); blur(2.dp.toPx()); lens(10.dp.toPx(), 18.dp.toPx()) }
+                        shape = { RoundedCornerShape(22.dp) },
+                        effects = { vibrancy(); blur(3.dp.toPx()); lens(8.dp.toPx(), 16.dp.toPx()) }
                     )
-                    .padding(horizontal = 18.dp, vertical = 12.dp)
-                    .navigationBarsPadding(),
+                    .clip(RoundedCornerShape(22.dp))
+                    .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(22.dp))
+                    .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 PagBtn("← 上一页", page > 1) { runSearch(query, sort, page - 1) }
