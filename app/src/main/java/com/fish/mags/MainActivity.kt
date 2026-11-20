@@ -315,9 +315,10 @@ fun MagsApp() {
                 // 顶部标题（下移搜索栏，同时把顶部留白填上）
                 BasicText(
                     "肥鱼搜",
-                    style = ts(18f, Color(0xE6FFFFFF), FontWeight.Medium),
-                    modifier = Modifier.fillMaxWidth(),
-                    // 居中：BasicText 支持 textAlign 通过 style
+                    style = ts(17f, Color(0xD9FFFFFF), FontWeight.Medium).copy(
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(16.dp))
 
