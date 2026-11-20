@@ -510,13 +510,6 @@ fun MagsApp() {
                         }
                     }
 
-                    // 外部改变（比如点别的）时平滑滑过去；拖动中不干扰
-                    LaunchedEffect(idx) {
-                        if (!dragging) slide.animateTo(
-                            idx.toFloat(),
-                            spring(dampingRatio = 0.72f, stiffness = 420f)
-                        )
-                    }
 
                     // 容器
                     Box(
@@ -539,9 +532,10 @@ fun MagsApp() {
                                         requireUnconsumed = false
                                     )
                                     val startX = down.position.x
-                                    val startIdx = slide.value
+                                    val startPos = slide.value
                                     var totalDx = 0f
                                     var moved = false
+                                    dragPos = startPos     // 跟手从当前位置开始，避免跳
                                     dragging = true
                                     while (true) {
                                         val ev = awaitPointerEvent()
@@ -553,38 +547,35 @@ fun MagsApp() {
                                         if (moved) {
                                             ch.consume()
                                             // 普通 state 赋值：每帧只触发一次重组，不起协程
-                                            dragPos = (startIdx + totalDx / tabPx)
+                                            dragPos = (startPos + totalDx / tabPx)
                                                 .coerceIn(0f, last)
                                         }
                                     }
-                                    dragging = false
                                     if (!moved) {
-                                        // 只提交状态；动画由 LaunchedEffect(idx) 统一驱动，
-                                        // 否则两个 animateTo 会互相打断 → 指示器来回抖。
-                                        commit(
-                                            (startX / tabPx - 0.5f).roundToInt()
-                                                .coerceIn(0, opts.size - 1)
-                                        )
+                                        // 点选：归到最近档位，滑过去
+                                        dragging = false
+                                        val target = (startX / tabPx - 0.5f)
+                                            .roundToInt().coerceIn(0, opts.size - 1)
+                                        scope.launch {
+                                            slide.animateTo(
+                                                target.toFloat(),
+                                                spring(dampingRatio = 0.72f, stiffness = 420f)
+                                            )
+                                        }
+                                        commit(target)
                                     } else {
+                                        // 拖动松手：吸附到最近档位（限位）
                                         val target = dragPos.roundToInt()
                                             .coerceIn(0, opts.size - 1)
-                                        val willChange = opts[target].first != sort
-                                        commit(target)
                                         scope.launch {
-                                            // 先对齐到手指松开的位置，再吸附
-                                            slide.snapTo(dragPos)
-                                            if (!willChange) {
-                                                // 没换项时不会有 LaunchedEffect 动画，这里补上
-                                                slide.animateTo(
-                                                    target.toFloat(),
-                                                    spring(dampingRatio = 0.68f, stiffness = 360f)
-                                                )
-                                            }
+                                            slide.snapTo(dragPos)   // 从松手处接着走，不跳
+                                            dragging = false        // snap 之后再交还控制权
+                                            slide.animateTo(
+                                                target.toFloat(),
+                                                spring(dampingRatio = 0.66f, stiffness = 340f)
+                                            )
                                         }
-                                        if (willChange) {
-                                            // 交给 LaunchedEffect(idx) 做，避免双重动画
-                                            dragging = true
-                                        }
+                                        commit(target)
                                     }
                                 }
                             }
