@@ -31,8 +31,8 @@ kotlin {
 
 dependencies {
     implementation("io.github.kyant0:backdrop:2.0.0-alpha03")
-    implementation("org.jetbrains.compose.ui:ui:1.12.0")
-    implementation("org.jetbrains.compose.foundation:foundation:1.12.0")
-    implementation("org.jetbrains.compose.ui:ui-graphics:1.12.0")
+    implementation("org.jetbrains.compose.ui:ui:1.10.1")
+    implementation("org.jetbrains.compose.foundation:foundation:1.10.1")
+    implementation("org.jetbrains.compose.ui:ui-graphics:1.10.1")
     implementation("androidx.activity:activity-compose:1.10.1")
 }
