@@ -25,17 +25,17 @@ jobs:
           ls "$ANDROID_HOME/platforms" 2>/dev/null || echo "(no platforms)"
           ls "$ANDROID_HOME/build-tools" 2>/dev/null || echo "(no build-tools)"
 
-      - name: Ensure SDK 35 present
+      - name: Ensure SDK 36 present
         run: |
           SDKM=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)
           echo "sdkmanager=$SDKM"
           yes | "$SDKM" --licenses > /dev/null 2>&1 || true
-          "$SDKM" "platforms;android-35" "build-tools;35.0.0" 2>&1 | tail -5 || true
+          "$SDKM" "platforms;android-36" "build-tools;36.0.0" 2>&1 | tail -5 || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.11.1'
+          gradle-version: '8.13'
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
