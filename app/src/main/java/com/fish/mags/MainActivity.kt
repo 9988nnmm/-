@@ -63,8 +63,14 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import kotlin.math.roundToInt
 
 const val BASE = "http://192.168.1.14:8090"
+
+// 顶层常量：pointerInput 的 key 必须是稳定对象，否则每次重组都会重建手势
+private val SORT_OPTS_UI = listOf(
+    "seed" to "种子", "size" to "大小", "date" to "时间", "name" to "名称"
+)
 
 // ---------------- 数据层 ----------------
 
@@ -364,21 +370,33 @@ fun MagsApp() {
 
             // ---- 排序栏 / 收藏夹的一键投光鸭 ----
             if (screen == "list") {
-                // 整体玻璃胶囊 + 滑动指示器
+                // 整体玻璃胶囊 + 可拖动/可点击的滑动指示器
                 BoxWithConstraints(
                     Modifier.fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                         .height(46.dp)
                 ) {
-                    val opts = listOf(
-                        "seed" to "种子", "size" to "大小",
-                        "date" to "时间", "name" to "名称"
-                    )
+                    val opts = SORT_OPTS_UI
+                    val last = (opts.size - 1).toFloat()
                     val idx = opts.indexOfFirst { it.first == sort }.coerceAtLeast(0)
                     val tabW = maxWidth / opts.size
+                    val tabPx = with(androidx.compose.ui.platform.LocalDensity.current) {
+                        tabW.toPx()
+                    }
                     val slide = remember { Animatable(idx.toFloat()) }
+                    var dragging by remember { mutableStateOf(false) }
+
+                    fun commit(i: Int) {
+                        val key = opts[i.coerceIn(0, opts.size - 1)].first
+                        if (key != sort) {
+                            sort = key
+                            runSearch(query, key, 1)
+                        }
+                    }
+
+                    // 外部改变（比如点别的）时平滑滑过去；拖动中不干扰
                     LaunchedEffect(idx) {
-                        slide.animateTo(
+                        if (!dragging) slide.animateTo(
                             idx.toFloat(),
                             spring(dampingRatio = 0.72f, stiffness = 420f)
                         )
@@ -398,9 +416,41 @@ fun MagsApp() {
                             )
                             .clip(RoundedCornerShape(23.dp))
                             .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(23.dp))
+                            // 点击：按落点算第几个
+                            .pointerInput(tabPx) {
+                                androidx.compose.foundation.gestures.detectTapGestures { off ->
+                                    commit((off.x / tabPx).toInt())
+                                }
+                            }
+                            // 拖动：指示器跟手，松手吸附
+                            .pointerInput(tabPx) {
+                                androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                                    onDragStart = { dragging = true },
+                                    onDragCancel = { dragging = false },
+                                    onDragEnd = {
+                                        dragging = false
+                                        val target = slide.value.roundToInt().coerceIn(0, opts.size - 1)
+                                        commit(target)
+                                        scope.launch {
+                                            slide.animateTo(
+                                                target.toFloat(),
+                                                spring(dampingRatio = 0.68f, stiffness = 360f)
+                                            )
+                                        }
+                                    },
+                                    onHorizontalDrag = { change, dx ->
+                                        change.consume()
+                                        scope.launch {
+                                            slide.snapTo(
+                                                (slide.value + dx / tabPx).coerceIn(0f, last)
+                                            )
+                                        }
+                                    }
+                                )
+                            }
                     )
 
-                    // 滑动指示器：跟着 slide.value 平滑移动
+                    // 指示器
                     Box(
                         Modifier
                             .offset(x = tabW * slide.value + 4.dp, y = 4.dp)
@@ -424,7 +474,7 @@ fun MagsApp() {
                             .border(1.dp, accent.copy(alpha = 0.60f), RoundedCornerShape(19.dp))
                     )
 
-                    // 文字层
+                    // 文字层（不拦截手势）
                     Row(Modifier.fillMaxSize()) {
                         opts.forEach { (k, label) ->
                             val on = sort == k
@@ -434,20 +484,8 @@ fun MagsApp() {
                                 tween(240),
                                 label = "sortText"
                             )
-                            val ir = remember { MutableInteractionSource() }
-                            val pressed by ir.collectIsPressedAsState()
-                            val sc by animateFloatAsState(
-                                if (pressed) 0.93f else 1f,
-                                spring(0.55f, 900f),
-                                label = "sortScale"
-                            )
                             Box(
-                                Modifier.weight(1f).fillMaxHeight()
-                                    .graphicsLayer { scaleX = sc; scaleY = sc }
-                                    .clickable(
-                                        interactionSource = ir,
-                                        indication = null
-                                    ) { sort = k; runSearch(query, k, 1) },
+                                Modifier.weight(1f).fillMaxHeight(),
                                 contentAlignment = Alignment.Center
                             ) {
                                 BasicText(
