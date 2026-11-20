@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,6 +22,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.fish.mags.glass.R
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -190,20 +194,33 @@ fun MagsApp() {
 
         // ============ 背景层（玻璃折射的内容） ============
         Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
+            // 樱花背景图（铺满，裁切）
+            Image(
+                painter = painterResource(R.drawable.bg),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            // 顶/底压暗，保证白字和玻璃有对比
             Box(
                 Modifier.fillMaxSize().background(
-                    Brush.linearGradient(
-                        0f to Color(0xFF4F46E5),
-                        0.4f to Color(0xFF0EA5E9),
-                        0.75f to Color(0xFF0B1220),
-                        1f to Color(0xFF1E1B4B)
+                    Brush.verticalGradient(
+                        0f to Color(0x8C0A0E1A),
+                        0.28f to Color(0x400A0E1A),
+                        0.62f to Color(0x4D0A0E1A),
+                        1f to Color(0xCC0A0E1A)
                     )
                 )
             )
-            Box(Modifier.size(300.dp).offset((-40).dp, 90.dp).background(Color(0x7C7C3AED), RoundedCornerShape(150.dp)))
-            Box(Modifier.size(220.dp).offset(210.dp, 420.dp).background(Color(0x6622D3EE), RoundedCornerShape(110.dp)))
-            Box(Modifier.size(260.dp).offset(30.dp, 760.dp).background(Color(0x5C99F6E4), RoundedCornerShape(130.dp)))
-            Box(Modifier.size(180.dp).offset(150.dp, 1180.dp).background(Color(0x4DBB6FF0), RoundedCornerShape(90.dp)))
+            // 左侧冷色 + 右侧暖色的极淡叠加，让玻璃折射有色彩层次
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.linearGradient(
+                        0f to Color(0x1A4F46E5),
+                        1f to Color(0x147C3AED)
+                    )
+                )
+            )
         }
 
         // ============ 前景 ============
