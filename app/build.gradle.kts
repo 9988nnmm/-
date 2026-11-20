@@ -34,5 +34,6 @@ dependencies {
     implementation("org.jetbrains.compose.ui:ui:1.10.1")
     implementation("org.jetbrains.compose.foundation:foundation:1.10.1")
     implementation("org.jetbrains.compose.ui:ui-graphics:1.10.1")
+    implementation("org.jetbrains.compose.material3:material3:1.10.1")
     implementation("androidx.activity:activity-compose:1.10.1")
 }
