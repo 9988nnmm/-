@@ -291,29 +291,64 @@ fun MagsApp() {
                 }
             }
 
-            // ---- 排序 ----
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf("seed" to "种子", "size" to "大小", "date" to "时间", "name" to "名称").forEach { (k, label) ->
-                    val on = sort == k
+            // ---- 排序栏 / 收藏夹的一键投光鸭 ----
+            if (screen == "list") {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("seed" to "种子", "size" to "大小", "date" to "时间", "name" to "名称").forEach { (k, label) ->
+                        val on = sort == k
+                        Box(
+                            Modifier
+                                .then(
+                                    if (on) Modifier.drawBackdrop(
+                                        backdrop = backdrop,
+                                        shape = { RoundedCornerShape(19.dp) },
+                                        effects = { vibrancy(); blur(2.dp.toPx()); lens(7.dp.toPx(), 14.dp.toPx()) }
+                                    ) else Modifier
+                                )
+                                .clip(RoundedCornerShape(19.dp))
+                                .background(if (on) Color.Transparent else Color(0x14FFFFFF))
+                                .clickable { sort = k; runSearch(query, k, 1) }
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            BasicText(label, style = ts(13f, if (on) Color.White else Color(0xAAFFFFFF),
+                                if (on) FontWeight.Bold else FontWeight.Normal))
+                        }
+                    }
+                }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
                     Box(
-                        Modifier
-                            .then(
-                                if (on) Modifier.drawBackdrop(
-                                    backdrop = backdrop,
-                                    shape = { RoundedCornerShape(19.dp) },
-                                    effects = { vibrancy(); blur(2.dp.toPx()); lens(7.dp.toPx(), 14.dp.toPx()) }
-                                ) else Modifier
+                        Modifier.fillMaxWidth().height(42.dp)
+                            .drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { RoundedCornerShape(21.dp) },
+                                effects = { vibrancy(); blur(2.dp.toPx()); lens(8.dp.toPx(), 16.dp.toPx()) }
                             )
-                            .clip(RoundedCornerShape(19.dp))
-                            .background(if (on) Color.Transparent else Color(0x14FFFFFF))
-                            .clickable { sort = k; runSearch(query, k, 1) }
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .clip(RoundedCornerShape(21.dp))
+                            .clickable(enabled = favs.isNotEmpty()) {
+                                Toast.makeText(ctx, "正在批量投递…", Toast.LENGTH_SHORT).show()
+                                scope.launch {
+                                    try {
+                                        val o = api("/api/addall")
+                                        Toast.makeText(ctx, o.optString("msg"), Toast.LENGTH_LONG).show()
+                                        loadFavs()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(ctx, "批量投递失败", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
-                        BasicText(label, style = ts(13f, if (on) Color.White else Color(0xAAFFFFFF),
-                            if (on) FontWeight.Bold else FontWeight.Normal))
+                        BasicText(
+                            if (favs.isEmpty()) "暂无收藏可投递" else "一键投光鸭（${favs.size} 条）",
+                            style = ts(14f, if (favs.isEmpty()) Color(0x88FFFFFF) else Color.White,
+                                if (favs.isEmpty()) FontWeight.Normal else FontWeight.Bold)
+                        )
                     }
                 }
             }
@@ -459,50 +494,6 @@ fun MagsApp() {
                             )
                         }
                     }
-                }
-            }
-        }
-
-        // ---- 收藏夹：一键投光鸭 ----
-        if (screen == "favs" && favs.isNotEmpty()) {
-            Box(
-                Modifier.align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { RoundedCornerShape(26.dp, 26.dp, 0.dp, 0.dp) },
-                        effects = { vibrancy(); blur(2.dp.toPx()); lens(10.dp.toPx(), 18.dp.toPx()) }
-                    )
-                    .padding(horizontal = 18.dp, vertical = 13.dp)
-                    .navigationBarsPadding(),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    Modifier.fillMaxWidth().height(48.dp)
-                        .drawBackdrop(
-                            backdrop = backdrop,
-                            shape = { RoundedCornerShape(24.dp) },
-                            effects = { vibrancy(); blur(2.dp.toPx()); lens(8.dp.toPx(), 16.dp.toPx()) }
-                        )
-                        .clip(RoundedCornerShape(24.dp))
-                        .clickable {
-                            Toast.makeText(ctx, "正在批量投递…", Toast.LENGTH_SHORT).show()
-                            scope.launch {
-                                try {
-                                    val o = api("/api/addall")
-                                    Toast.makeText(ctx, o.optString("msg"), Toast.LENGTH_LONG).show()
-                                    loadFavs()
-                                } catch (e: Exception) {
-                                    Toast.makeText(ctx, "批量投递失败", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    BasicText(
-                        "一键投光鸭（${favs.size} 条）",
-                        style = ts(14.5f, Color.White, FontWeight.Bold)
-                    )
                 }
             }
         }
