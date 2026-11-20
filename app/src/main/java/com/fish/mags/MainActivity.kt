@@ -1,6 +1,7 @@
 package com.fish.mags
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -21,6 +22,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -50,7 +52,8 @@ const val BASE = "http://192.168.1.14:8090"
 data class Item(
     val hash: String, val title: String, val size: String, val seed: Int,
     val leech: Int, val date: String, val site: String, val magnet: String,
-    val sub: String, val fav: Boolean, val added: Boolean
+    val sub: String, val fav: Boolean, val added: Boolean,
+    val note: String = "", val busy: Boolean = false
 )
 
 suspend fun api(path: String): JSONObject = withContext(Dispatchers.IO) {
@@ -110,6 +113,7 @@ fun MagsApp() {
     val scope = rememberCoroutineScope()
     val kb = LocalSoftwareKeyboardController.current
     val clip = LocalClipboardManager.current
+    val ctx = LocalContext.current
 
     var input by remember { mutableStateOf("") }
     var query by remember { mutableStateOf("") }
@@ -296,9 +300,60 @@ fun MagsApp() {
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         itemsIndexed(items) { idx, it ->
-                            ResultCard(backdrop, it, idx) {
-                                clip.setText(AnnotatedString(it.magnet))
-                            }
+                            ResultCard(
+                                backdrop, it, idx,
+                                onCopy = {
+                                    clip.setText(AnnotatedString(it.magnet))
+                                    Toast.makeText(ctx, "磁力链接已复制", Toast.LENGTH_SHORT).show()
+                                },
+                                onFav = {
+                                    scope.launch {
+                                        try {
+                                            val o = api("/api/fav?h=" + it.hash)
+                                            val on = o.optBoolean("fav")
+                                            items = items.toMutableList().also { l ->
+                                                l[idx] = l[idx].copy(fav = on)
+                                            }
+                                            Toast.makeText(ctx, if (on) "已收藏" else "已取消收藏", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(ctx, "操作失败", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                onSub = {
+                                    Toast.makeText(ctx, "正在检查字幕…", Toast.LENGTH_SHORT).show()
+                                    scope.launch {
+                                        try {
+                                            val o = api("/api/sub?h=" + it.hash)
+                                            val msg = if (o.optBoolean("ok"))
+                                                o.optString("msg") + (o.optJSONArray("subs")?.let { a ->
+                                                    if (a.length() > 0) "：" + a.getString(0).take(40) else "" } ?: "")
+                                            else "失败：" + o.optString("error")
+                                            items = items.toMutableList().also { l ->
+                                                l[idx] = l[idx].copy(note = msg)
+                                            }
+                                        } catch (e: Exception) {
+                                            Toast.makeText(ctx, "查字幕失败", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                onAdd = {
+                                    Toast.makeText(ctx, "正在投递光鸭…", Toast.LENGTH_SHORT).show()
+                                    scope.launch {
+                                        try {
+                                            val o = api("/api/add?h=" + it.hash)
+                                            val ok = o.optBoolean("ok")
+                                            val msg = o.optString("msg")
+                                            items = items.toMutableList().also { l ->
+                                                l[idx] = l[idx].copy(added = ok, note = if (ok) msg else "投递失败")
+                                            }
+                                            Toast.makeText(ctx, if (ok) "已投递光鸭" else msg, Toast.LENGTH_LONG).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(ctx, "投递失败", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            )
                         }
                     }
                 }
@@ -361,7 +416,10 @@ private fun PagBtn(label: String, enabled: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ResultCard(backdrop: LayerBackdrop, item: Item, idx: Int, onCopy: () -> Unit) {
+private fun ResultCard(
+    backdrop: LayerBackdrop, item: Item, idx: Int,
+    onCopy: () -> Unit, onFav: () -> Unit, onSub: () -> Unit, onAdd: () -> Unit
+) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -397,8 +455,13 @@ private fun ResultCard(backdrop: LayerBackdrop, item: Item, idx: Int, onCopy: ()
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ActionBtn(backdrop, "磁力链接", true, onCopy)
-            ActionBtn(backdrop, "查字幕", false) {}
-            ActionBtn(backdrop, if (item.fav) "已收藏" else "☆ 收藏", false) {}
+            ActionBtn(backdrop, "查字幕", false, onSub)
+            ActionBtn(backdrop, if (item.fav) "已收藏" else "☆ 收藏", false, onFav)
+            ActionBtn(backdrop, if (item.added) "已投光鸭" else "＋光鸭", false, onAdd)
+        }
+        if (item.note.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            BasicText(item.note, style = ts(11f, Color(0xCCBFDBFE)), maxLines = 3)
         }
     }
 }
