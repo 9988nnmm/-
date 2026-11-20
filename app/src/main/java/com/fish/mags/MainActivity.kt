@@ -64,6 +64,7 @@ import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -187,6 +188,7 @@ fun MagsApp() {
     var favMsg by remember { mutableStateOf("") }
     var accent by remember { mutableStateOf(Color(0xFFFFD60A)) }   // 跟随壁纸的强调色
     var hist by remember { mutableStateOf(listOf<String>()) }
+    var clearArm by remember { mutableStateOf(false) }   // 清空的二次确认状态
 
     fun runSearch(q: String, s: String, p: Int) {
         if (q.isBlank()) return
@@ -326,7 +328,8 @@ fun MagsApp() {
                     Box(
                         Modifier.weight(1f).height(46.dp)
                             .clip(RoundedCornerShape(23.dp))
-                            .background(Color(0x3DFFFFFF))
+                            .background(Color(0x4D101828))
+                            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(23.dp))
                             .padding(horizontal = 18.dp),
                         contentAlignment = Alignment.CenterStart
                     ) {
@@ -418,19 +421,33 @@ fun MagsApp() {
                                     BasicText("×", style = ts(14f, Color(0xCCFFFFFF), FontWeight.Medium))
                                 }
                             }
+                        }
                         Spacer(Modifier.weight(1f))
                         BasicText(
-                            "清空",
-                            style = ts(11.5f, Color(0x99FFFFFF)),
+                            if (clearArm) "确定清空?" else "清空",
+                            style = ts(11.5f, if (clearArm) Color(0xFFFF9DB4) else Color(0x99FFFFFF),
+                                if (clearArm) FontWeight.Bold else FontWeight.Normal),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(11.dp))
+                                .background(if (clearArm) Color(0x33FF4D6D) else Color.Transparent)
                                 .clickable {
-                                    scope.launch {
-                                        try {
-                                            api("/api/delhist?q=*")
-                                            hist = emptyList()
-                                            Toast.makeText(ctx, "已清空搜索记录", Toast.LENGTH_SHORT).show()
-                                        } catch (_: Exception) { }
+                                    if (!clearArm) {
+                                        clearArm = true
+                                        scope.launch {
+                                            delay(3000)
+                                            clearArm = false
+                                        }
+                                    } else {
+                                        clearArm = false
+                                        scope.launch {
+                                            try {
+                                                api("/api/delhist?q=*")
+                                                hist = emptyList()
+                                                Toast.makeText(ctx, "已清空搜索记录", Toast.LENGTH_SHORT).show()
+                                            } catch (e: Exception) {
+                                                Toast.makeText(ctx, "清空失败", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
                                     }
                                 }
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
