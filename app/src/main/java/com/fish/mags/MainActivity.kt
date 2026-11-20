@@ -153,6 +153,24 @@ private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
 // 得意黑（Smiley Sans）—— 免费可商用，倾斜异形
 val Smiley = FontFamily(Font(R.font.smiley))
 
+/**
+ * 按下时轻微缩小 + 松开弹簧回弹。带一点过冲（dampingRatio < 1），
+ * 手感就是"软"的，不是生硬地弹回 1。
+ */
+@Composable
+private fun Modifier.pressBounce(ir: MutableInteractionSource, scale: Float = 0.94f): Modifier {
+    val pressed by ir.collectIsPressedAsState()
+    val sc by animateFloatAsState(
+        targetValue = if (pressed) scale else 1f,
+        animationSpec = spring(dampingRatio = 0.38f, stiffness = 1400f),
+        label = "pressBounce"
+    )
+    return this.graphicsLayer {
+        scaleX = sc
+        scaleY = sc
+    }
+}
+
 private fun ts(size: Float, color: Color = Color.White, weight: FontWeight = FontWeight.Normal) =
     TextStyle(color = color, fontSize = size.sp, fontWeight = weight)
 
@@ -353,14 +371,16 @@ fun MagsApp() {
                         )
                     }
                     Spacer(Modifier.width(10.dp))
+                    val searchIr = remember { MutableInteractionSource() }
                     Box(
                         Modifier.height(46.dp).width(70.dp)
+                            .pressBounce(searchIr, 0.92f)
                             .drawBackdrop(
                                 backdrop = backdrop,
                                 shape = { RoundedCornerShape(23.dp) },
                                 effects = { vibrancy(); blur(2.dp.toPx()); lens(9.dp.toPx(), 18.dp.toPx()) }
                             )
-                            .clickable {
+                            .clickable(interactionSource = searchIr, indication = null) {
                                 kb?.hide(); query = input; page = 1
                                 runSearch(input, sort, 1)
                             },
@@ -707,7 +727,6 @@ fun MagsApp() {
                                         scope.launch {
                                             try {
                                                 api("/api/fav?h=" + it.hash)
-                                                Toast.makeText(ctx, "已取消收藏", Toast.LENGTH_SHORT).show()
                                                 loadFavs()
                                             } catch (e: Exception) {
                                                 Toast.makeText(ctx, "操作失败", Toast.LENGTH_SHORT).show()
@@ -767,7 +786,6 @@ fun MagsApp() {
                                             items = items.toMutableList().also { l ->
                                                 l[idx] = l[idx].copy(fav = on)
                                             }
-                                            Toast.makeText(ctx, if (on) "已收藏" else "已取消收藏", Toast.LENGTH_SHORT).show()
                                         } catch (e: Exception) {
                                             Toast.makeText(ctx, "操作失败", Toast.LENGTH_SHORT).show()
                                         }
@@ -931,8 +949,10 @@ private fun MiniTag(txt: String, bg: Color, fg: Color) {
 
 @Composable
 private fun ActionBtn(backdrop: LayerBackdrop, label: String, primary: Boolean, onClick: () -> Unit) {
+    val ir = remember { MutableInteractionSource() }
     Box(
         Modifier
+            .pressBounce(ir)
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { RoundedCornerShape(13.dp) },
@@ -943,7 +963,7 @@ private fun ActionBtn(backdrop: LayerBackdrop, label: String, primary: Boolean, 
                 }
             )
             .clip(RoundedCornerShape(13.dp))
-            .clickable { onClick() }
+            .clickable(interactionSource = ir, indication = null) { onClick() }
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
         BasicText(
