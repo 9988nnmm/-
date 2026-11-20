@@ -6,13 +6,14 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,16 +32,21 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private fun t(
+    text: String,
+    size: Float,
+    color: Color = Color.White,
+    weight: FontWeight = FontWeight.Normal
+) = TextStyle(color = color, fontSize = size.sp, fontWeight = weight)
+
 @Composable
 fun GlassShowcase() {
     val backdrop = rememberLayerBackdrop()
 
     Box(Modifier.fillMaxSize()) {
-        // ---------- 背景层：被折射的内容 ----------
-        Box(
-            Modifier.fillMaxSize().layerBackdrop(backdrop)
-        ) {
-            // 渐变底
+
+        // ---------------- 背景层：玻璃要折射的内容 ----------------
+        Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
             Box(
                 Modifier.fillMaxSize().background(
                     Brush.linearGradient(
@@ -50,89 +56,75 @@ fun GlassShowcase() {
                     )
                 )
             )
-            // 彩色光斑（折射的细节来源）
-            Box(
-                Modifier.size(260.dp).offset(30.dp, 120.dp)
-                    .background(Color(0x88A855F7), RoundedCornerShape(130.dp))
-            )
-            Box(
-                Modifier.size(200.dp).offset(220.dp, 380.dp)
-                    .background(Color(0x7722D3EE), RoundedCornerShape(100.dp))
-            )
-            Box(
-                Modifier.size(240.dp).offset(60.dp, 620.dp)
-                    .background(Color(0x6699F6E4), RoundedCornerShape(120.dp))
-            )
-            // 细条纹：最能看出折射有没有生效
-            Column(Modifier.fillMaxSize().padding(top = 40.dp)) {
-                repeat(26) { i ->
-                    Box(
-                        Modifier.fillMaxWidth().height(14.dp)
-                            .background(if (i % 2 == 0) Color(0x18FFFFFF) else Color.Transparent)
-                    )
+            // 彩色光斑
+            Box(Modifier.size(260.dp).offset(20.dp, 130.dp)
+                .background(Color(0x88A855F7), RoundedCornerShape(130.dp)))
+            Box(Modifier.size(210.dp).offset(215.dp, 400.dp)
+                .background(Color(0x7722D3EE), RoundedCornerShape(105.dp)))
+            Box(Modifier.size(240.dp).offset(50.dp, 640.dp)
+                .background(Color(0x6699F6E4), RoundedCornerShape(120.dp)))
+            // 细条纹 —— 最能看出边缘有没有被弯曲
+            Column(Modifier.fillMaxSize().padding(top = 30.dp)) {
+                repeat(30) { i ->
+                    Box(Modifier.fillMaxWidth().height(13.dp)
+                        .background(if (i % 2 == 0) Color(0x1AFFFFFF) else Color.Transparent))
                 }
             }
         }
 
-        // ---------- 玻璃层 ----------
+        // ---------------- 玻璃层 ----------------
         Column(
             Modifier.fillMaxSize().padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text(
-                "液态玻璃 · 真折射验证",
-                color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+            Spacer(Modifier.height(28.dp))
+            BasicText("液态玻璃 · 真折射", style = t("", 23f, weight = FontWeight.Bold))
+            BasicText(
+                "同一张背景下：卡片①只有模糊，卡片②加了 lens() 折射",
+                style = t("", 12.5f, Color(0xCCE2E8F0))
             )
-            Text(
-                "下面两张卡片用同一个背景：上面只有模糊，下面加了 lens() 折射",
-                color = Color(0xCCE2E8F0), fontSize = 12.5.sp,
-                modifier = Modifier.padding(bottom = 6.dp)
-            )
-
-            GlassCard(backdrop, "① 只有模糊 blur(20dp)", blurOnly = true)
-            GlassCard(backdrop, "② 模糊 + 折射 lens(12,24)", blurOnly = false)
-
-            Spacer(Modifier.height(8.dp))
-
-            // 胶囊按钮
-            Box(
-                Modifier.fillMaxWidth().height(58.dp)
-                    .drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { RoundedCornerShape(29.dp) },
-                        effects = {
-                            vibrancy()
-                            blur(2.dp.toPx())
-                            lens(10.dp.toPx(), 20.dp.toPx())
-                        }
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("玻璃胶囊按钮", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            }
-
             Spacer(Modifier.height(4.dp))
 
-            // 半透明磨砂（对照组：无折射无厚感）
+            GlassCard(backdrop, "① 只有模糊 blur(20dp)", "背景被糊掉，边缘是平的", true)
+            GlassCard(backdrop, "② 模糊 + 折射 lens(12,24)", "背景看得清，边缘被弯曲 —— 这才是液态玻璃", false)
+
+            Spacer(Modifier.height(6.dp))
+
+            // 玻璃胶囊
             Box(
-                Modifier.fillMaxWidth().height(58.dp)
-                    .clip(RoundedCornerShape(29.dp))
-                    .background(Color(0x22FFFFFF)),
+                Modifier.fillMaxWidth().height(56.dp).drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { RoundedCornerShape(28.dp) },
+                    effects = {
+                        vibrancy()
+                        blur(2.dp.toPx())
+                        lens(10.dp.toPx(), 20.dp.toPx())
+                    }
+                ),
                 contentAlignment = Alignment.Center
             ) {
-                Text("① 普通半透明（网页 CSS 效果）", color = Color(0xCCFFFFFF), fontSize = 14.sp)
+                BasicText("玻璃胶囊按钮（真折射）", style = t("", 15f, weight = FontWeight.SemiBold))
+            }
+
+            // 对照组：网页 CSS 能做到的样子
+            Box(
+                Modifier.fillMaxWidth().height(56.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color(0x26FFFFFF)),
+                contentAlignment = Alignment.Center
+            ) {
+                BasicText("② 普通半透明（现在网页版的效果）", style = t("", 14f, Color(0xCCFFFFFF)))
             }
         }
     }
 }
 
 @Composable
-fun GlassCard(backdrop: LayerBackdrop, title: String, blurOnly: Boolean) {
+fun GlassCard(backdrop: LayerBackdrop, title: String, desc: String, blurOnly: Boolean) {
     Box(
         Modifier
             .fillMaxWidth()
-            .height(120.dp)
+            .height(118.dp)
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { RoundedCornerShape(26.dp) },
@@ -146,16 +138,13 @@ fun GlassCard(backdrop: LayerBackdrop, title: String, blurOnly: Boolean) {
                     }
                 }
             )
-            .padding(22.dp),
+            .padding(20.dp),
         contentAlignment = Alignment.CenterStart
     ) {
         Column {
-            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            BasicText(title, style = t("", 16f, weight = FontWeight.Bold))
             Spacer(Modifier.height(6.dp))
-            Text(
-                if (blurOnly) "背景被糊掉，边缘是平的" else "背景看得清，边缘被弯曲 —— 这才是液态玻璃",
-                color = Color(0xDDE8EEF7), fontSize = 13.sp
-            )
+            BasicText(desc, style = t("", 13f, Color(0xDDE8EEF7)))
         }
     }
 }
