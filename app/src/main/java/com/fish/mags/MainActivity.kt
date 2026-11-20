@@ -20,6 +20,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
@@ -355,62 +364,101 @@ fun MagsApp() {
 
             // ---- 排序栏 / 收藏夹的一键投光鸭 ----
             if (screen == "list") {
-                // 整体一个玻璃胶囊，内部选项平铺；选中项黄色发光
-                Box(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
-                        .height(48.dp)
-                        .drawBackdrop(
-                            backdrop = backdrop,
-                            shape = { RoundedCornerShape(24.dp) },
-                            effects = { vibrancy(); blur(3.dp.toPx()); lens(9.dp.toPx(), 18.dp.toPx()) }
-                        )
-                        .clip(RoundedCornerShape(24.dp))
-                        .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(24.dp))
-                        .padding(4.dp)
+                // 整体玻璃胶囊 + 滑动指示器
+                BoxWithConstraints(
+                    Modifier.fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .height(46.dp)
                 ) {
-                    Row(Modifier.fillMaxSize()) {
-                        listOf("seed" to "种子", "size" to "大小", "date" to "时间", "name" to "名称")
-                            .forEach { (k, label) ->
-                                val on = sort == k
-                                Box(
-                                    Modifier.weight(1f).fillMaxHeight()
-                                        .drawBehind {
-                                            if (!on) return@drawBehind
-                                            // 选中项：椭圆光晕，颜色取自壁纸
-                                            drawRect(
-                                                brush = Brush.radialGradient(
-                                                    colors = listOf(
-                                                        accent.copy(alpha = 0.40f),
-                                                        accent.copy(alpha = 0.16f),
-                                                        accent.copy(alpha = 0f)
-                                                    ),
-                                                    center = center,
-                                                    radius = size.maxDimension * 0.95f
-                                                )
-                                            )
-                                        }
-                                        .clip(RoundedCornerShape(20.dp))
-                                        .then(
-                                            if (on) Modifier.border(
-                                                1.dp,
-                                                accent.copy(alpha = 0.62f),
-                                                RoundedCornerShape(20.dp)
-                                            ) else Modifier
-                                        )
-                                        .clickable { sort = k; runSearch(query, k, 1) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    BasicText(
-                                        label,
-                                        style = ts(
-                                            13.5f,
-                                            if (on) accent.copy(alpha = 0.30f).compositeOver(Color.White)
-                                            else Color(0xE6E8EEFF),
-                                            if (on) FontWeight.Bold else FontWeight.Medium
-                                        )
-                                    )
+                    val opts = listOf(
+                        "seed" to "种子", "size" to "大小",
+                        "date" to "时间", "name" to "名称"
+                    )
+                    val idx = opts.indexOfFirst { it.first == sort }.coerceAtLeast(0)
+                    val tabW = maxWidth / opts.size
+                    val slide = remember { Animatable(idx.toFloat()) }
+                    LaunchedEffect(idx) {
+                        slide.animateTo(
+                            idx.toFloat(),
+                            spring(dampingRatio = 0.72f, stiffness = 420f)
+                        )
+                    }
+
+                    // 容器
+                    Box(
+                        Modifier.fillMaxSize()
+                            .drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { RoundedCornerShape(23.dp) },
+                                effects = {
+                                    vibrancy()
+                                    blur(3.dp.toPx())
+                                    lens(9.dp.toPx(), 18.dp.toPx())
                                 }
+                            )
+                            .clip(RoundedCornerShape(23.dp))
+                            .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(23.dp))
+                    )
+
+                    // 滑动指示器：跟着 slide.value 平滑移动
+                    Box(
+                        Modifier
+                            .offset(x = tabW * slide.value + 4.dp, y = 4.dp)
+                            .width(tabW - 8.dp)
+                            .fillMaxHeight()
+                            .padding(vertical = 4.dp)
+                            .drawBehind {
+                                drawRect(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(
+                                            accent.copy(alpha = 0.42f),
+                                            accent.copy(alpha = 0.15f),
+                                            accent.copy(alpha = 0f)
+                                        ),
+                                        center = center,
+                                        radius = size.maxDimension * 1.0f
+                                    )
+                                )
                             }
+                            .clip(RoundedCornerShape(19.dp))
+                            .border(1.dp, accent.copy(alpha = 0.60f), RoundedCornerShape(19.dp))
+                    )
+
+                    // 文字层
+                    Row(Modifier.fillMaxSize()) {
+                        opts.forEach { (k, label) ->
+                            val on = sort == k
+                            val tc by animateColorAsState(
+                                if (on) accent.copy(alpha = 0.35f).compositeOver(Color.White)
+                                else Color(0xE6E8EEFF),
+                                tween(240),
+                                label = "sortText"
+                            )
+                            val ir = remember { MutableInteractionSource() }
+                            val pressed by ir.collectIsPressedAsState()
+                            val sc by animateFloatAsState(
+                                if (pressed) 0.93f else 1f,
+                                spring(0.55f, 900f),
+                                label = "sortScale"
+                            )
+                            Box(
+                                Modifier.weight(1f).fillMaxHeight()
+                                    .graphicsLayer { scaleX = sc; scaleY = sc }
+                                    .clickable(
+                                        interactionSource = ir,
+                                        indication = null
+                                    ) { sort = k; runSearch(query, k, 1) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                BasicText(
+                                    label,
+                                    style = ts(
+                                        13.5f, tc,
+                                        if (on) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
             } else {
