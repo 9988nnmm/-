@@ -451,12 +451,12 @@ fun MagsApp() {
                                     }
                                 )
                             }
-                    )
+                    ) {
 
                     // 指示器
                     Box(
                         Modifier
-                            .offset(x = tabW * slide.value + 4.dp, y = 4.dp)
+                            .offset(x = tabW * slide.value + 4.dp)
                             .width(tabW - 8.dp)
                             .fillMaxHeight()
                             .padding(vertical = 4.dp)
@@ -502,6 +502,7 @@ fun MagsApp() {
                         }
                     }
                 }
+                    }
             } else {
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
