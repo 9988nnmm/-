@@ -316,16 +316,14 @@ fun MagsApp() {
             // ---- 顶栏 ----
             Column(
                 Modifier.fillMaxWidth()
+                    .padding(start = 12.dp, end = 12.dp, top = 44.dp)
                     .drawBackdrop(
                         backdrop = backdrop,
-                        shape = { RoundedCornerShape(0.dp, 0.dp, 24.dp, 24.dp) },
-                        effects = { vibrancy(); blur(6.dp.toPx()) },
-                        // 贴屏幕边的那三边不要高光，否则会看到一条白线
-                        highlight = {
-                            com.kyant.backdrop.highlight.Highlight.Default.copy(alpha = 0f)
-                        }
+                        shape = { RoundedCornerShape(26.dp) },
+                        effects = { vibrancy(); blur(8.dp.toPx()); lens(8.dp.toPx(), 16.dp.toPx()) }
                     )
-                    .padding(start = 16.dp, end = 16.dp, top = 46.dp, bottom = 10.dp)
+                    .clip(RoundedCornerShape(26.dp))
+                    .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)
             ) {
                 // 搜索框
                 Row(verticalAlignment = Alignment.CenterVertically) {
