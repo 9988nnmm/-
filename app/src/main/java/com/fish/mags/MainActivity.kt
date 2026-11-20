@@ -20,6 +20,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -418,13 +421,13 @@ fun MagsApp() {
                             .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(23.dp))
                             // 点击：按落点算第几个
                             .pointerInput(tabPx) {
-                                androidx.compose.foundation.gestures.detectTapGestures { off ->
+                                detectTapGestures { off ->
                                     commit((off.x / tabPx).toInt())
                                 }
                             }
                             // 拖动：指示器跟手，松手吸附
                             .pointerInput(tabPx) {
-                                androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                                detectHorizontalDragGestures(
                                     onDragStart = { dragging = true },
                                     onDragCancel = { dragging = false },
                                     onDragEnd = {
