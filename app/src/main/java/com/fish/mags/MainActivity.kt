@@ -4,17 +4,28 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.runtime.Composable
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kyant.backdrop.backdrops.LayerBackdrop
@@ -24,127 +35,398 @@ import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContent { GlassShowcase() }
+const val BASE = "http://192.168.1.14:8090"
+
+// ---------------- 数据层 ----------------
+
+data class Item(
+    val hash: String, val title: String, val size: String, val seed: Int,
+    val leech: Int, val date: String, val site: String, val magnet: String,
+    val sub: String, val fav: Boolean, val added: Boolean
+)
+
+suspend fun api(path: String): JSONObject = withContext(Dispatchers.IO) {
+    val conn = (URL(BASE + path).openConnection() as HttpURLConnection).apply {
+        connectTimeout = 12000
+        readTimeout = 100000
+    }
+    try {
+        val txt = conn.inputStream.bufferedReader().use { it.readText() }
+        JSONObject(txt)
+    } finally {
+        conn.disconnect()
     }
 }
 
-private fun t(
-    text: String,
-    size: Float,
-    color: Color = Color.White,
-    weight: FontWeight = FontWeight.Normal
-) = TextStyle(color = color, fontSize = size.sp, fontWeight = weight)
+suspend fun doSearch(q: String, sort: String, page: Int): Pair<List<Item>, JSONObject> {
+    val enc = URLEncoder.encode(q, "UTF-8")
+    val o = api("/api/search?q=$enc&sort=$sort&page=$page")
+    val arr = o.optJSONArray("items") ?: return emptyList<Item>() to o
+    val list = ArrayList<Item>(arr.length())
+    for (i in 0 until arr.length()) {
+        val it = arr.getJSONObject(i)
+        list.add(
+            Item(
+                hash = it.optString("hash"),
+                title = it.optString("title"),
+                size = it.optString("size"),
+                seed = it.optInt("seed"),
+                leech = it.optInt("leech"),
+                date = it.optString("date"),
+                site = it.optString("site"),
+                magnet = it.optString("magnet"),
+                sub = it.optString("sub"),
+                fav = it.optBoolean("fav"),
+                added = it.optBoolean("added")
+            )
+        )
+    }
+    return list to o
+}
+
+// ---------------- UI ----------------
+
+private fun ts(size: Float, color: Color = Color.White, w: FontWeight = FontWeight.Normal) =
+    TextStyle(color = color, fontSize = size.sp, fontWeight = w)
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(s: Bundle?) {
+        super.onCreate(s)
+        setContent { MagsApp() }
+    }
+}
 
 @Composable
-fun GlassShowcase() {
+fun MagsApp() {
     val backdrop = rememberLayerBackdrop()
+    val scope = rememberCoroutineScope()
+    val kb = LocalSoftwareKeyboardController.current
+    val clip = LocalClipboardManager.current
+
+    var input by remember { mutableStateOf("") }
+    var query by remember { mutableStateOf("") }
+    var sort by remember { mutableStateOf("seed") }
+    var page by remember { mutableStateOf(1) }
+    var loading by remember { mutableStateOf(false) }
+    var items by remember { mutableStateOf(listOf<Item>()) }
+    var total by remember { mutableStateOf(0) }
+    var pages by remember { mutableStateOf(1) }
+    var errors by remember { mutableStateOf(listOf<String>()) }
+    var chan by remember { mutableStateOf("") }
+    var err by remember { mutableStateOf<String?>(null) }
+
+    fun runSearch(q: String, s: String, p: Int) {
+        if (q.isBlank()) return
+        loading = true; err = null
+        scope.launch {
+            try {
+                val (list, o) = doSearch(q, s, p)
+                items = list
+                total = o.optInt("total")
+                pages = o.optInt("pages", 1)
+                page = o.optInt("page", 1)
+                val ea = o.optJSONArray("errors")
+                errors = if (ea == null) emptyList() else (0 until ea.length()).map { ea.getString(it) }
+            } catch (e: Exception) {
+                err = e.message ?: e.javaClass.simpleName
+                items = emptyList()
+            } finally {
+                loading = false
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        try {
+            val o = api("/api/chan")
+            chan = if (o.optBoolean("proxy")) "代理 " + o.optString("addr").substringAfterLast(":")
+            else "直连"
+        } catch (_: Exception) {
+            chan = "离线"
+        }
+        runSearch("孤独摇滚", "seed", 1)
+        input = "孤独摇滚"
+    }
 
     Box(Modifier.fillMaxSize()) {
 
-        // ---------------- 背景层：玻璃要折射的内容 ----------------
+        // ============ 背景层（玻璃折射的内容） ============
         Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
             Box(
                 Modifier.fillMaxSize().background(
                     Brush.linearGradient(
-                        0f to Color(0xFF5B6CF9),
-                        0.45f to Color(0xFF22B8F0),
-                        1f to Color(0xFF0B1220)
+                        0f to Color(0xFF4F46E5),
+                        0.4f to Color(0xFF0EA5E9),
+                        0.75f to Color(0xFF0B1220),
+                        1f to Color(0xFF1E1B4B)
                     )
                 )
             )
-            // 彩色光斑
-            Box(Modifier.size(260.dp).offset(20.dp, 130.dp)
-                .background(Color(0x88A855F7), RoundedCornerShape(130.dp)))
-            Box(Modifier.size(210.dp).offset(215.dp, 400.dp)
-                .background(Color(0x7722D3EE), RoundedCornerShape(105.dp)))
-            Box(Modifier.size(240.dp).offset(50.dp, 640.dp)
-                .background(Color(0x6699F6E4), RoundedCornerShape(120.dp)))
-            // 细条纹 —— 最能看出边缘有没有被弯曲
-            Column(Modifier.fillMaxSize().padding(top = 30.dp)) {
-                repeat(30) { i ->
-                    Box(Modifier.fillMaxWidth().height(13.dp)
-                        .background(if (i % 2 == 0) Color(0x1AFFFFFF) else Color.Transparent))
+            Box(Modifier.size(300.dp).offset((-40).dp, 90.dp).background(Color(0x7C7C3AED), RoundedCornerShape(150.dp)))
+            Box(Modifier.size(220.dp).offset(210.dp, 420.dp).background(Color(0x6622D3EE), RoundedCornerShape(110.dp)))
+            Box(Modifier.size(260.dp).offset(30.dp, 760.dp).background(Color(0x5C99F6E4), RoundedCornerShape(130.dp)))
+            Box(Modifier.size(180.dp).offset(150.dp, 1180.dp).background(Color(0x4DBB6FF0), RoundedCornerShape(90.dp)))
+        }
+
+        // ============ 前景 ============
+        Column(Modifier.fillMaxSize()) {
+
+            // ---- 顶栏 ----
+            Column(
+                Modifier.fillMaxWidth()
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { RoundedCornerShape(0.dp, 0.dp, 28.dp, 28.dp) },
+                        effects = { vibrancy(); blur(2.dp.toPx()); lens(10.dp.toPx(), 18.dp.toPx()) }
+                    )
+                    .padding(start = 16.dp, end = 16.dp, top = 34.dp, bottom = 14.dp)
+            ) {
+                // 搜索框
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.weight(1f).height(50.dp)
+                            .clip(RoundedCornerShape(25.dp))
+                            .background(Color(0x1FFFFFFF))
+                            .padding(horizontal = 18.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        if (input.isEmpty()) {
+                            BasicText("片名 / 番号 / 关键词", style = ts(15f, Color(0x88FFFFFF)))
+                        }
+                        BasicTextField(
+                            value = input,
+                            onValueChange = { input = it },
+                            singleLine = true,
+                            textStyle = ts(15.5f),
+                            cursorBrush = SolidColor(Color(0xFF7DD3FC)),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = {
+                                kb?.hide(); query = input; page = 1
+                                runSearch(input, sort, 1)
+                            }),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Box(
+                        Modifier.height(50.dp).width(74.dp)
+                            .drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { RoundedCornerShape(25.dp) },
+                                effects = { vibrancy(); blur(2.dp.toPx()); lens(9.dp.toPx(), 18.dp.toPx()) }
+                            )
+                            .clickable {
+                                kb?.hide(); query = input; page = 1
+                                runSearch(input, sort, 1)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        BasicText("搜索", style = ts(15f, weight = FontWeight.Bold))
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    PillText("· $chan")
+                    Spacer(Modifier.width(8.dp))
+                    if (total > 0) PillText("$total 条 · 第 $page/$pages 页")
+                    Spacer(Modifier.weight(1f))
+                    if (loading) BasicText("搜索中…", style = ts(12.5f, Color(0xCCBFDBFE)))
+                }
+            }
+
+            // ---- 排序 ----
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("seed" to "种子", "size" to "大小", "date" to "时间", "name" to "名称").forEach { (k, label) ->
+                    val on = sort == k
+                    Box(
+                        Modifier
+                            .then(
+                                if (on) Modifier.drawBackdrop(
+                                    backdrop = backdrop,
+                                    shape = { RoundedCornerShape(19.dp) },
+                                    effects = { vibrancy(); blur(2.dp.toPx()); lens(7.dp.toPx(), 14.dp.toPx()) }
+                                ) else Modifier
+                            )
+                            .clip(RoundedCornerShape(19.dp))
+                            .background(if (on) Color.Transparent else Color(0x14FFFFFF))
+                            .clickable { sort = k; runSearch(query, k, 1) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        BasicText(label, style = ts(13f, if (on) Color.White else Color(0xAAFFFFFF),
+                            if (on) FontWeight.Bold else FontWeight.Normal))
+                    }
+                }
+            }
+
+            // ---- 错误提示 ----
+            if (errors.isNotEmpty()) {
+                Box(
+                    Modifier.padding(horizontal = 14.dp).fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0x33F472B6))
+                        .padding(10.dp)
+                ) {
+                    BasicText("部分源失败：" + errors.joinToString("，").take(60),
+                        style = ts(11.5f, Color(0xFFFBCFE8)))
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+
+            // ---- 结果列表 ----
+            Box(Modifier.weight(1f)) {
+                when {
+                    err != null -> CenterHint("连不上服务\n$err\n\n检查常开机上的 mags 是否在跑")
+                    loading && items.isEmpty() -> CenterHint("搜索中…")
+                    items.isEmpty() -> CenterHint("没结果，换个关键词试试")
+                    else -> LazyColumn(
+                        Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 90.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        itemsIndexed(items) { idx, it ->
+                            ResultCard(backdrop, it, idx) {
+                                clip.setText(AnnotatedString(it.magnet))
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // ---------------- 玻璃层 ----------------
-        Column(
-            Modifier.fillMaxSize().padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Spacer(Modifier.height(28.dp))
-            BasicText("液态玻璃 · 真折射", style = t("", 23f, weight = FontWeight.Bold))
-            BasicText(
-                "同一张背景下：卡片①只有模糊，卡片②加了 lens() 折射",
-                style = t("", 12.5f, Color(0xCCE2E8F0))
-            )
-            Spacer(Modifier.height(4.dp))
-
-            GlassCard(backdrop, "① 只有模糊 blur(20dp)", "背景被糊掉，边缘是平的", true)
-            GlassCard(backdrop, "② 模糊 + 折射 lens(12,24)", "背景看得清，边缘被弯曲 —— 这才是液态玻璃", false)
-
-            Spacer(Modifier.height(6.dp))
-
-            // 玻璃胶囊
-            Box(
-                Modifier.fillMaxWidth().height(56.dp).drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { RoundedCornerShape(28.dp) },
-                    effects = {
-                        vibrancy()
-                        blur(2.dp.toPx())
-                        lens(10.dp.toPx(), 20.dp.toPx())
-                    }
-                ),
-                contentAlignment = Alignment.Center
+        // ---- 底部分页（悬浮玻璃条） ----
+        if (items.isNotEmpty()) {
+            Row(
+                Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { RoundedCornerShape(26.dp, 26.dp, 0.dp, 0.dp) },
+                        effects = { vibrancy(); blur(2.dp.toPx()); lens(10.dp.toPx(), 18.dp.toPx()) }
+                    )
+                    .padding(horizontal = 18.dp, vertical = 12.dp)
+                    .navigationBarsPadding(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                BasicText("玻璃胶囊按钮（真折射）", style = t("", 15f, weight = FontWeight.SemiBold))
-            }
-
-            // 对照组：网页 CSS 能做到的样子
-            Box(
-                Modifier.fillMaxWidth().height(56.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Color(0x26FFFFFF)),
-                contentAlignment = Alignment.Center
-            ) {
-                BasicText("② 普通半透明（现在网页版的效果）", style = t("", 14f, Color(0xCCFFFFFF)))
+                PagBtn("← 上一页", page > 1) { runSearch(query, sort, page - 1) }
+                Spacer(Modifier.weight(1f))
+                BasicText("$page / $pages", style = ts(13f, Color(0xCCFFFFFF), FontWeight.Bold))
+                Spacer(Modifier.weight(1f))
+                PagBtn("下一页 →", page < pages) { runSearch(query, sort, page + 1) }
             }
         }
     }
 }
 
 @Composable
-fun GlassCard(backdrop: LayerBackdrop, title: String, desc: String, blurOnly: Boolean) {
+private fun PillText(txt: String) {
     Box(
+        Modifier.clip(RoundedCornerShape(11.dp))
+            .background(Color(0x1FFFFFFF))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        BasicText(txt, style = ts(11.5f, Color(0xDDE0F2FE)))
+    }
+}
+
+@Composable
+private fun CenterHint(txt: String) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        BasicText(txt, style = ts(13.5f, Color(0x99FFFFFF)))
+    }
+}
+
+@Composable
+private fun PagBtn(label: String, enabled: Boolean, onClick: () -> Unit) {
+    BasicText(
+        label,
+        style = ts(13.5f, if (enabled) Color(0xFFBAE6FD) else Color(0x44FFFFFF),
+            if (enabled) FontWeight.SemiBold else FontWeight.Normal),
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+    )
+}
+
+@Composable
+private fun ResultCard(backdrop: LayerBackdrop, item: Item, idx: Int, onCopy: () -> Unit) {
+    Column(
         Modifier
             .fillMaxWidth()
-            .height(118.dp)
             .drawBackdrop(
                 backdrop = backdrop,
-                shape = { RoundedCornerShape(26.dp) },
-                effects = {
-                    vibrancy()
-                    if (blurOnly) {
-                        blur(20.dp.toPx())
-                    } else {
-                        blur(2.dp.toPx())
-                        lens(12.dp.toPx(), 24.dp.toPx())
-                    }
-                }
+                shape = { RoundedCornerShape(22.dp) },
+                effects = { vibrancy(); blur(2.dp.toPx()); lens(11.dp.toPx(), 20.dp.toPx()) }
             )
-            .padding(20.dp),
-        contentAlignment = Alignment.CenterStart
+            .padding(15.dp)
     ) {
-        Column {
-            BasicText(title, style = t("", 16f, weight = FontWeight.Bold))
-            Spacer(Modifier.height(6.dp))
-            BasicText(desc, style = t("", 13f, Color(0xDDE8EEF7)))
+        BasicText(item.title, style = ts(14.5f, weight = FontWeight.SemiBold), maxLines = 3)
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            MiniTag(item.site, Color(0x33A5B4FC), Color(0xFFC7D2FE))
+            Spacer(Modifier.width(8.dp))
+            BasicText(item.size, style = ts(11.5f, Color(0xB3E0E7FF)))
+            if (item.seed > 0) {
+                Spacer(Modifier.width(8.dp))
+                BasicText("🌱${item.seed}", style = ts(11.5f, Color(0xB3A7F3D0)))
+            }
+            if (item.date.isNotEmpty()) {
+                Spacer(Modifier.width(8.dp))
+                BasicText(item.date, style = ts(11f, Color(0x80E0E7FF)))
+            }
+            if (item.sub == "zh" || item.sub == "sub") {
+                Spacer(Modifier.width(6.dp))
+                MiniTag(if (item.sub == "zh") "中字" else "字幕", Color(0x334ADE80), Color(0xFFBBF7D0))
+            }
+            Spacer(Modifier.weight(1f))
+            if (item.added) MiniTag("已投", Color(0x334ADE80), Color(0xFFBBF7D0))
+            else if (item.fav) MiniTag("★", Color(0x33FDBA74), Color(0xFFFED7AA))
         }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ActionBtn(backdrop, "磁力链接", true, onCopy)
+            ActionBtn(backdrop, "查字幕", false) {}
+            ActionBtn(backdrop, if (item.fav) "已收藏" else "☆ 收藏", false) {}
+        }
+    }
+}
+
+@Composable
+private fun MiniTag(txt: String, bg: Color, fg: Color) {
+    Box(Modifier.clip(RoundedCornerShape(6.dp)).background(bg).padding(horizontal = 6.dp, vertical = 2.dp)) {
+        BasicText(txt, style = ts(10.5f, fg, FontWeight.SemiBold))
+    }
+}
+
+@Composable
+private fun ActionBtn(backdrop: LayerBackdrop, label: String, primary: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .then(
+                if (primary) Modifier.drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { RoundedCornerShape(13.dp) },
+                    effects = { vibrancy(); blur(2.dp.toPx()); lens(6.dp.toPx(), 12.dp.toPx()) }
+                ) else Modifier
+            )
+            .clip(RoundedCornerShape(13.dp))
+            .background(if (primary) Color.Transparent else Color(0x14FFFFFF))
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+    ) {
+        BasicText(label, style = ts(12.5f, if (primary) Color.White else Color(0xCCE0E7FF),
+            if (primary) FontWeight.Bold else FontWeight.Normal))
     }
 }
