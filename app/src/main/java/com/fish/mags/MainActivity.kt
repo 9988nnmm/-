@@ -419,20 +419,46 @@ fun MagsApp() {
                             )
                             .clip(RoundedCornerShape(23.dp))
                             .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(23.dp))
-                            // 点击：按落点算第几个
+                            // 一个手势区同时处理：原地松手=点击，拖动=跟手
                             .pointerInput(tabPx) {
-                                detectTapGestures { off ->
-                                    commit((off.x / tabPx).toInt())
-                                }
-                            }
-                            // 拖动：指示器跟手，松手吸附
-                            .pointerInput(tabPx) {
-                                detectHorizontalDragGestures(
-                                    onDragStart = { dragging = true },
-                                    onDragCancel = { dragging = false },
-                                    onDragEnd = {
-                                        dragging = false
-                                        val target = slide.value.roundToInt().coerceIn(0, opts.size - 1)
+                                androidx.compose.foundation.gestures.awaitEachGesture {
+                                    val down = androidx.compose.foundation.gestures.awaitFirstDown(
+                                        requireUnconsumed = false
+                                    )
+                                    val startX = down.position.x
+                                    val startIdx = slide.value
+                                    var totalDx = 0f
+                                    var moved = false
+                                    dragging = true
+                                    while (true) {
+                                        val ev = awaitPointerEvent()
+                                        val ch = ev.changes.firstOrNull() ?: break
+                                        if (!ch.pressed) break
+                                        val dx = ch.positionChange().x
+                                        if (!moved && kotlin.math.abs(totalDx + dx) > 6f) moved = true
+                                        totalDx += dx
+                                        if (moved) {
+                                            ch.consume()
+                                            scope.launch {
+                                                slide.snapTo(
+                                                    (startIdx + totalDx / tabPx)
+                                                        .coerceIn(0f, last)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    dragging = false
+                                    if (!moved) {
+                                        commit((startX / tabPx).toInt())
+                                        scope.launch {
+                                            slide.animateTo(
+                                                idx.toFloat(),
+                                                spring(dampingRatio = 0.72f, stiffness = 420f)
+                                            )
+                                        }
+                                    } else {
+                                        val target = slide.value.roundToInt()
+                                            .coerceIn(0, opts.size - 1)
                                         commit(target)
                                         scope.launch {
                                             slide.animateTo(
@@ -440,16 +466,8 @@ fun MagsApp() {
                                                 spring(dampingRatio = 0.68f, stiffness = 360f)
                                             )
                                         }
-                                    },
-                                    onHorizontalDrag = { change, dx ->
-                                        change.consume()
-                                        scope.launch {
-                                            slide.snapTo(
-                                                (slide.value + dx / tabPx).coerceIn(0f, last)
-                                            )
-                                        }
                                     }
-                                )
+                                }
                             }
                     ) {
 
@@ -460,6 +478,7 @@ fun MagsApp() {
                             .width(tabW - 8.dp)
                             .fillMaxHeight()
                             .padding(vertical = 4.dp)
+                            .clip(RoundedCornerShape(19.dp))
                             .drawBehind {
                                 drawRect(
                                     brush = Brush.radialGradient(
@@ -473,7 +492,6 @@ fun MagsApp() {
                                     )
                                 )
                             }
-                            .clip(RoundedCornerShape(19.dp))
                             .border(1.dp, accent.copy(alpha = 0.60f), RoundedCornerShape(19.dp))
                     )
 
