@@ -126,6 +126,10 @@ fun MagsApp() {
     var errors by remember { mutableStateOf(listOf<String>()) }
     var chan by remember { mutableStateOf("") }
     var err by remember { mutableStateOf<String?>(null) }
+    var screen by remember { mutableStateOf("list") }   // list | favs
+    var favs by remember { mutableStateOf(listOf<Item>()) }
+    var favBusy by remember { mutableStateOf(false) }
+    var favMsg by remember { mutableStateOf("") }
 
     fun runSearch(q: String, s: String, p: Int) {
         if (q.isBlank()) return
@@ -144,6 +148,28 @@ fun MagsApp() {
                 items = emptyList()
             } finally {
                 loading = false
+            }
+        }
+    }
+
+    fun loadFavs() {
+        favBusy = true
+        scope.launch {
+            try {
+                val o = api("/api/favs")
+                val arr = o.optJSONArray("items")
+                val l = ArrayList<Item>()
+                if (arr != null) for (i in 0 until arr.length()) {
+                    val j = arr.getJSONObject(i)
+                    l.add(Item(j.optString("hash"), j.optString("title"), j.optString("size"),
+                        0, 0, "", j.optString("site"), j.optString("magnet"), "",
+                        true, j.optBoolean("added")))
+                }
+                favs = l
+            } catch (e: Exception) {
+                favMsg = "读取收藏失败：" + (e.message ?: "")
+            } finally {
+                favBusy = false
             }
         }
     }
@@ -244,6 +270,24 @@ fun MagsApp() {
                     if (total > 0) PillText("$total 条 · 第 $page/$pages 页")
                     Spacer(Modifier.weight(1f))
                     if (loading) BasicText("搜索中…", style = ts(12.5f, Color(0xCCBFDBFE)))
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        Modifier.drawBackdrop(
+                            backdrop = backdrop,
+                            shape = { RoundedCornerShape(13.dp) },
+                            effects = { vibrancy(); blur(2.dp.toPx()); lens(6.dp.toPx(), 12.dp.toPx()) }
+                        ).clip(RoundedCornerShape(13.dp))
+                            .clickable {
+                                if (screen == "favs") screen = "list"
+                                else { screen = "favs"; loadFavs() }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        BasicText(
+                            if (screen == "favs") "← 返回" else "★ 收藏夹",
+                            style = ts(12.5f, Color.White, FontWeight.SemiBold)
+                        )
+                    }
                 }
             }
 
@@ -288,9 +332,68 @@ fun MagsApp() {
                 Spacer(Modifier.height(8.dp))
             }
 
-            // ---- 结果列表 ----
+            // ---- 列表区（搜索 / 收藏夹） ----
             Box(Modifier.weight(1f)) {
-                when {
+                if (screen == "favs") {
+                    when {
+                        favBusy && favs.isEmpty() -> CenterHint("读取收藏…")
+                        favs.isEmpty() -> CenterHint("还没有收藏\n在搜索结果里点「☆ 收藏」就会出现在这里")
+                        else -> LazyColumn(
+                            Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 90.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            item {
+                                if (favMsg.isNotEmpty()) BasicText(favMsg, style = ts(12f, Color(0xFFFBCFE8)))
+                            }
+                            itemsIndexed(favs) { idx, it ->
+                                ResultCard(
+                                    backdrop, it, idx,
+                                    onCopy = {
+                                        clip.setText(AnnotatedString(it.magnet))
+                                        Toast.makeText(ctx, "磁力链接已复制", Toast.LENGTH_SHORT).show()
+                                    },
+                                    onFav = {
+                                        scope.launch {
+                                            try {
+                                                api("/api/fav?h=" + it.hash)
+                                                Toast.makeText(ctx, "已取消收藏", Toast.LENGTH_SHORT).show()
+                                                loadFavs()
+                                            } catch (e: Exception) {
+                                                Toast.makeText(ctx, "操作失败", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    },
+                                    onSub = {
+                                        Toast.makeText(ctx, "正在检查字幕…", Toast.LENGTH_SHORT).show()
+                                        scope.launch {
+                                            try {
+                                                val o = api("/api/sub?h=" + it.hash)
+                                                val msg = if (o.optBoolean("ok")) o.optString("msg")
+                                                          else "失败：" + o.optString("error")
+                                                favs = favs.toMutableList().also { l -> l[idx] = l[idx].copy(note = msg) }
+                                            } catch (e: Exception) { }
+                                        }
+                                    },
+                                    onAdd = {
+                                        Toast.makeText(ctx, "正在投递光鸭…", Toast.LENGTH_SHORT).show()
+                                        scope.launch {
+                                            try {
+                                                val o = api("/api/add?h=" + it.hash)
+                                                val ok = o.optBoolean("ok")
+                                                val msg = o.optString("msg")
+                                                favs = favs.toMutableList().also { l ->
+                                                    l[idx] = l[idx].copy(added = ok, note = if (ok) msg else "投递失败")
+                                                }
+                                                Toast.makeText(ctx, if (ok) "已投递光鸭" else msg, Toast.LENGTH_LONG).show()
+                                            } catch (e: Exception) { }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                } else when {
                     err != null -> CenterHint("连不上服务\n$err\n\n检查常开机上的 mags 是否在跑")
                     loading && items.isEmpty() -> CenterHint("搜索中…")
                     items.isEmpty() -> CenterHint("没结果，换个关键词试试")
@@ -361,7 +464,7 @@ fun MagsApp() {
         }
 
         // ---- 底部分页（悬浮玻璃条） ----
-        if (items.isNotEmpty()) {
+        if (items.isNotEmpty() && screen == "list") {
             Row(
                 Modifier.align(Alignment.BottomCenter)
                     .fillMaxWidth()
@@ -477,19 +580,26 @@ private fun MiniTag(txt: String, bg: Color, fg: Color) {
 private fun ActionBtn(backdrop: LayerBackdrop, label: String, primary: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
-            .then(
-                if (primary) Modifier.drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { RoundedCornerShape(13.dp) },
-                    effects = { vibrancy(); blur(2.dp.toPx()); lens(6.dp.toPx(), 12.dp.toPx()) }
-                ) else Modifier
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { RoundedCornerShape(13.dp) },
+                effects = {
+                    vibrancy()
+                    blur((if (primary) 2f else 5f).dp.toPx())
+                    lens(6.dp.toPx(), (if (primary) 12f else 9f).dp.toPx())
+                }
             )
             .clip(RoundedCornerShape(13.dp))
-            .background(if (primary) Color.Transparent else Color(0x14FFFFFF))
             .clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
-        BasicText(label, style = ts(12.5f, if (primary) Color.White else Color(0xCCE0E7FF),
-            if (primary) FontWeight.Bold else FontWeight.Normal))
+        BasicText(
+            label,
+            style = ts(
+                12.5f,
+                if (primary) Color.White else Color(0xF2E4ECFF),
+                if (primary) FontWeight.Bold else FontWeight.Medium
+            )
+        )
     }
 }
