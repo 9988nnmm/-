@@ -315,8 +315,18 @@ fun MagsApp() {
                 // 顶部标题（下移搜索栏，同时把顶部留白填上）
                 BasicText(
                     "肥鱼搜",
-                    style = ts(17f, Color(0xD9FFFFFF), FontWeight.Medium).copy(
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    style = TextStyle(
+                        fontSize = 25.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        letterSpacing = 4.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        brush = Brush.linearGradient(
+                            0f to Color(0xFFFFE3F0),
+                            0.35f to Color(0xFFFFFFFF),
+                            0.7f to Color(0xFFE9D9FF),
+                            1f to accent.copy(alpha = 0.85f)
+                        )
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -366,15 +376,16 @@ fun MagsApp() {
                     }
                 }
 
-                // 搜索历史
+                // 搜索历史（点文字搜索，点 × 删单条，末尾「清空」全删）
                 if (hist.isNotEmpty()) {
                     Spacer(Modifier.height(10.dp))
                     Row(
                         Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        hist.take(4).forEach { hq ->
-                            Box(
+                        hist.take(3).forEach { hq ->
+                            Row(
                                 Modifier
                                     .clip(RoundedCornerShape(13.dp))
                                     .background(Color(0x26FFFFFF))
@@ -383,14 +394,48 @@ fun MagsApp() {
                                         query = hq
                                         runSearch(hq, sort, 1)
                                     }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
+                                BasicText(hq.take(9), style = ts(12f, Color(0xD9E8EEFF)))
+                                Spacer(Modifier.width(4.dp))
                                 BasicText(
-                                    hq.take(12),
-                                    style = ts(12f, Color(0xD9E8EEFF))
+                                    "×",
+                                    style = ts(14f, Color(0x99FFFFFF)),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(9.dp))
+                                        .clickable {
+                                            scope.launch {
+                                                try {
+                                                    val o = api("/api/delhist?q=" +
+                                                        URLEncoder.encode(hq, "UTF-8"))
+                                                    val a = o.optJSONArray("items")
+                                                    hist = if (a == null) emptyList()
+                                                           else (0 until a.length()).map { a.getString(it) }
+                                                } catch (_: Exception) { }
+                                            }
+                                        }
+                                        .padding(horizontal = 5.dp, vertical = 1.dp)
                                 )
                             }
                         }
+                        Spacer(Modifier.weight(1f))
+                        BasicText(
+                            "清空",
+                            style = ts(11.5f, Color(0x99FFFFFF)),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(11.dp))
+                                .clickable {
+                                    scope.launch {
+                                        try {
+                                            api("/api/delhist?q=*")
+                                            hist = emptyList()
+                                            Toast.makeText(ctx, "已清空搜索记录", Toast.LENGTH_SHORT).show()
+                                        } catch (_: Exception) { }
+                                    }
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
                     }
                 }
 
@@ -553,7 +598,7 @@ fun MagsApp() {
                                 if (on) accent.copy(alpha = 0.35f).compositeOver(Color.White)
                                 else Color(0xE6E8EEFF),
                                 tween(240),
-                                label = "sortText"
+                                label = "sortText_$k"
                             )
                             Box(
                                 Modifier.weight(1f).fillMaxHeight(),
