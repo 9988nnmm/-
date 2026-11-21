@@ -892,12 +892,11 @@ private fun ResultCard(
                 backdrop = backdrop,
                 shape = { RoundedCornerShape(22.dp) },
                 effects = {
-                    if (scrolling) {
-                        // 滑动中：lens/vibrancy 每帧重算背景，是掉帧主因，先只留轻模糊
-                        blur(1.5.dp.toPx())
-                    } else {
-                        vibrancy()
-                        blur(2.dp.toPx())
+                    // vibrancy + blur 一直保留，保证滑动/静止颜色完全一致；
+                    // 只在滑动时去掉最贵的 lens（每帧重算背景折射）
+                    vibrancy()
+                    blur(2.dp.toPx())
+                    if (!scrolling) {
                         lens(11.dp.toPx(), 20.dp.toPx())
                     }
                 }
