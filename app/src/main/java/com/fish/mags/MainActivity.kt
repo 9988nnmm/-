@@ -76,7 +76,16 @@ import java.net.URL
 import java.net.URLEncoder
 import kotlin.math.roundToInt
 
-const val BASE = "http://192.168.1.14:8090"
+// 两个地址：家里走局域网（快），出门走 Tailscale（慢但能连）
+// 探测成功后记住，后续请求直接用，不再每次试错
+data class Endpoint(val url: String, val connectMs: Int)
+
+val ENDPOINTS = listOf(
+    Endpoint("http://192.168.1.14:8090", 2500),      // 同一 Wi-Fi
+    Endpoint("http://100.91.248.109:8090", 9000)     // Tailscale
+)
+
+@Volatile var activeBase: String? = null
 
 // 顶层常量：pointerInput 的 key 必须是稳定对象，否则每次重组都会重建手势
 private val SORT_OPTS_UI = listOf(
@@ -93,16 +102,33 @@ data class Item(
 )
 
 suspend fun api(path: String): JSONObject = withContext(Dispatchers.IO) {
-    val conn = (URL(BASE + path).openConnection() as HttpURLConnection).apply {
-        connectTimeout = 12000
-        readTimeout = 100000
+    // 顺序：上次成功的那个优先，其余按原顺序补
+    val order = buildList {
+        activeBase?.let { add(ENDPOINTS.first { e -> e.url == it }) }
+        ENDPOINTS.forEach { e -> if (e.url != activeBase) add(e) }
     }
-    try {
-        val txt = conn.inputStream.bufferedReader().use { it.readText() }
-        JSONObject(txt)
-    } finally {
-        conn.disconnect()
+    var last: Exception? = null
+    for (ep in order) {
+        try {
+            val conn = (URL(ep.url + path).openConnection() as HttpURLConnection).apply {
+                connectTimeout = ep.connectMs
+                readTimeout = 100000
+                // 关掉自动重定向之外的隐式行为，失败要快
+                useCaches = false
+            }
+            try {
+                val txt = conn.inputStream.bufferedReader().use { it.readText() }
+                if (activeBase != ep.url) activeBase = ep.url   // 记住能用的
+                return@withContext JSONObject(txt)
+            } finally {
+                conn.disconnect()
+            }
+        } catch (e: Exception) {
+            last = e
+            if (activeBase == ep.url) activeBase = null      // 这个挂了，下次重新选
+        }
     }
+    throw last ?: Exception("两个地址都连不上")
 }
 
 suspend fun doSearch(q: String, sort: String, page: Int): Pair<List<Item>, JSONObject> {
