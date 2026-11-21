@@ -11,7 +11,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -20,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.*
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -209,6 +209,9 @@ fun MagsApp() {
     var favMsg by remember { mutableStateOf("") }
     var accent by remember { mutableStateOf(Color(0xFFFFD60A)) }   // 跟随壁纸的强调色
     var hist by remember { mutableStateOf(listOf<String>()) }
+    // 搜索列表的滚动状态：滑动中降级玻璃效果，保住帧率
+    val listState = rememberLazyListState()
+    val scrolling by remember { derivedStateOf { listState.isScrollInProgress } }
     var clearArm by remember { mutableStateOf(false) }   // 清空的二次确认状态
 
     fun runSearch(q: String, s: String, p: Int) {
@@ -712,12 +715,11 @@ fun MagsApp() {
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             item {
-                    }
                                 if (favMsg.isNotEmpty()) BasicText(favMsg, style = ts(12f, Color(0xFFFBCFE8)))
                             }
                             itemsIndexed(favs) { idx, it ->
                                 ResultCard(
-                                    backdrop, it, idx,
+                                    backdrop, it, idx, false,
                                     onCopy = {
                                         clip.setText(AnnotatedString(it.magnet))
                                     },
@@ -760,13 +762,7 @@ fun MagsApp() {
                     err != null -> CenterHint("连不上服务\n$err\n\n检查常开机上的 mags 是否在跑")
                     loading && items.isEmpty() -> CenterHint("搜索中…")
                     items.isEmpty() -> CenterHint("没结果，换个关键词试试")
-                    else -> {
-                        val listState = rememberLazyListState()
-                        // 滚动中降级：lens/vibrancy 每帧重算背景，是掉帧主因
-                        val scrolling by remember {
-                            derivedStateOf { listState.isScrollInProgress }
-                        }
-                        LazyColumn(
+                    else -> LazyColumn(
                         Modifier.fillMaxSize(),
                         state = listState,
                         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 104.dp),
@@ -897,7 +893,7 @@ private fun ResultCard(
                 shape = { RoundedCornerShape(22.dp) },
                 effects = {
                     if (scrolling) {
-                        // 滑动中：只留一层很轻的模糊，先保住 60fps
+                        // 滑动中：lens/vibrancy 每帧重算背景，是掉帧主因，先只留轻模糊
                         blur(1.5.dp.toPx())
                     } else {
                         vibrancy()
