@@ -131,9 +131,12 @@ suspend fun api(path: String): JSONObject = withContext(Dispatchers.IO) {
     throw last ?: Exception("两个地址都连不上")
 }
 
-suspend fun doSearch(q: String, sort: String, page: Int): Pair<List<Item>, JSONObject> {
+suspend fun doSearch(
+    q: String, sort: String, page: Int, force: Boolean = false
+): Pair<List<Item>, JSONObject> {
     val enc = URLEncoder.encode(q, "UTF-8")
-    val o = api("/api/search?q=$enc&sort=$sort&page=$page")
+    val extra = if (force) "&retry=1" else ""
+    val o = api("/api/search?q=$enc&sort=$sort&page=$page$extra")
     val arr = o.optJSONArray("items") ?: return emptyList<Item>() to o
     val list = ArrayList<Item>(arr.length())
     for (i in 0 until arr.length()) {
@@ -238,12 +241,12 @@ fun MagsApp() {
 
     var clearArm by remember { mutableStateOf(false) }   // 清空的二次确认状态
 
-    fun runSearch(q: String, s: String, p: Int) {
+    fun runSearch(q: String, s: String, p: Int, force: Boolean = false) {
         if (q.isBlank()) return
         loading = true; err = null
         scope.launch {
             try {
-                val (list, o) = doSearch(q, s, p)
+                val (list, o) = doSearch(q, s, p, force)
                 items = list
                 total = o.optInt("total")
                 pages = o.optInt("pages", 1)
@@ -511,6 +514,32 @@ fun MagsApp() {
                     Spacer(Modifier.weight(1f))
                     if (loading) BasicText("搜索中…", style = ts(12.5f, Color(0xCCBFDBFE)))
                     Spacer(Modifier.width(8.dp))
+                    // 刷新：强制清缓存 + 清源冷却 + 重探代理，再重搜当前页
+                    val refreshIr = remember { MutableInteractionSource() }
+                    Box(
+                        Modifier.pressBounce(refreshIr, 0.93f)
+                            .drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { RoundedCornerShape(13.dp) },
+                                effects = { vibrancy(); blur(2.dp.toPx()); lens(6.dp.toPx(), 12.dp.toPx()) }
+                            )
+                            .clip(RoundedCornerShape(13.dp))
+                            .clickable(interactionSource = refreshIr, indication = null) {
+                                if (query.isNotBlank() && !loading) {
+                                    runSearch(query, sort, page, force = true)
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        BasicText(
+                            if (loading) "…" else "刷新",
+                            style = ts(12.5f,
+                                if (loading) Color(0x66FFFFFF) else Color(0xFFBAE6FD),
+                                FontWeight.SemiBold)
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+
                     val favIr = remember { MutableInteractionSource() }
                     Box(
                         Modifier.pressBounce(favIr, 0.93f)
