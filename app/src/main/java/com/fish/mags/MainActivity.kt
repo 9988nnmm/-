@@ -955,7 +955,8 @@ private fun ActionBtn(
             )
             .clip(RoundedCornerShape(13.dp))
             .clickable(interactionSource = ir, indication = null) { onClick() }
-            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
     ) {
         // 文字切换（收藏 → 已收藏）走淡入淡出，不要"啪"一下换掉
         Crossfade(
