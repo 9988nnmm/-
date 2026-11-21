@@ -313,8 +313,8 @@ fun MagsApp() {
         } catch (_: Exception) {
             chan = "离线"
         }
-        runSearch("孤独摇滚", "seed", 1)
-        input = "孤独摇滚"
+        // 启动时不自动搜索：早期调试玻璃效果时这里硬编码了「孤独摇滚」，
+        // 导致每次冷启动搜索框都被填满并自动搜一次。留空让用户自己输入。
     }
 
     Box(Modifier.fillMaxSize()) {
