@@ -209,9 +209,7 @@ fun MagsApp() {
     var favMsg by remember { mutableStateOf("") }
     var accent by remember { mutableStateOf(Color(0xFFFFD60A)) }   // 跟随壁纸的强调色
     var hist by remember { mutableStateOf(listOf<String>()) }
-    // 搜索列表的滚动状态：滑动中降级玻璃效果，保住帧率
-    val listState = rememberLazyListState()
-    val scrolling by remember { derivedStateOf { listState.isScrollInProgress } }
+
     var clearArm by remember { mutableStateOf(false) }   // 清空的二次确认状态
 
     fun runSearch(q: String, s: String, p: Int) {
@@ -719,7 +717,7 @@ fun MagsApp() {
                             }
                             itemsIndexed(favs) { idx, it ->
                                 ResultCard(
-                                    backdrop, it, idx, false,
+                                    backdrop, it, idx,
                                     onCopy = {
                                         clip.setText(AnnotatedString(it.magnet))
                                     },
@@ -764,13 +762,12 @@ fun MagsApp() {
                     items.isEmpty() -> CenterHint("没结果，换个关键词试试")
                     else -> LazyColumn(
                         Modifier.fillMaxSize(),
-                        state = listState,
                         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 104.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         itemsIndexed(items) { idx, it ->
                             ResultCard(
-                                backdrop, it, idx, scrolling,
+                                backdrop, it, idx,
                                 onCopy = {
                                     clip.setText(AnnotatedString(it.magnet))
                                 },
@@ -882,7 +879,7 @@ private fun PagBtn(label: String, enabled: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun ResultCard(
-    backdrop: LayerBackdrop, item: Item, idx: Int, scrolling: Boolean = false,
+    backdrop: LayerBackdrop, item: Item, idx: Int,
     onCopy: () -> Unit, onFav: () -> Unit, onSub: () -> Unit, onAdd: () -> Unit
 ) {
     Column(
@@ -891,15 +888,7 @@ private fun ResultCard(
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { RoundedCornerShape(22.dp) },
-                effects = {
-                    // vibrancy + blur 一直保留，保证滑动/静止颜色完全一致；
-                    // 只在滑动时去掉最贵的 lens（每帧重算背景折射）
-                    vibrancy()
-                    blur(2.dp.toPx())
-                    if (!scrolling) {
-                        lens(11.dp.toPx(), 20.dp.toPx())
-                    }
-                }
+                effects = { vibrancy(); blur(2.dp.toPx()); lens(11.dp.toPx(), 20.dp.toPx()) }
             )
             .padding(15.dp)
     ) {
