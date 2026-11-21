@@ -512,7 +512,6 @@ fun MagsApp() {
                     Spacer(Modifier.width(8.dp))
                     if (total > 0) PillText("$total 条 · 第 $page/$pages 页")
                     Spacer(Modifier.weight(1f))
-                    if (loading) BasicText("搜索中…", style = ts(12.5f, Color(0xCCBFDBFE)))
                     Spacer(Modifier.width(8.dp))
                     // 刷新：强制清缓存 + 清源冷却 + 重探代理，再重搜当前页
                     val refreshIr = remember { MutableInteractionSource() }
@@ -535,7 +534,9 @@ fun MagsApp() {
                             if (loading) "…" else "刷新",
                             style = ts(12.5f,
                                 if (loading) Color(0x66FFFFFF) else Color(0xFFBAE6FD),
-                                FontWeight.SemiBold)
+                                FontWeight.SemiBold),
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                     Spacer(Modifier.width(8.dp))
@@ -556,7 +557,9 @@ fun MagsApp() {
                     ) {
                         BasicText(
                             if (screen == "favs") "← 返回" else "★ 收藏夹",
-                            style = ts(12.5f, Color.White, FontWeight.SemiBold)
+                            style = ts(12.5f, Color.White, FontWeight.SemiBold),
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
@@ -907,7 +910,7 @@ private fun PillText(txt: String) {
             .background(Color(0x33FFFFFF))
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
-        BasicText(txt, style = ts(11.5f, Color(0xDDE0F2FE)))
+        BasicText(txt, style = ts(11.5f, Color(0xDDE0F2FE)), maxLines = 1, softWrap = false)
     }
 }
 
