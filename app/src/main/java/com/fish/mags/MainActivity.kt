@@ -239,6 +239,11 @@ fun MagsApp() {
     var accent by remember { mutableStateOf(Color(0xFFFFD60A)) }   // 跟随壁纸的强调色
     var hist by remember { mutableStateOf(listOf<String>()) }
 
+    // 列表滚动状态必须显式持有：不传 state 时 Compose 用的是内部默认实例，
+    // 换页后内容变了但滚动位置会保留，导致「滑到底部翻页，新页直接停在底部」。
+    val listState = rememberLazyListState()
+    val favListState = rememberLazyListState()
+
     var clearArm by remember { mutableStateOf(false) }   // 清空的二次确认状态
 
     fun runSearch(q: String, s: String, p: Int, force: Boolean = false) {
@@ -260,6 +265,7 @@ fun MagsApp() {
                 } catch (_: Exception) { }
                 val ea = o.optJSONArray("errors")
                 errors = if (ea == null) emptyList() else (0 until ea.length()).map { ea.getString(it) }
+                listState.scrollToItem(0)      // 换页/刷新后回到顶部
             } catch (e: Exception) {
                 err = e.message ?: e.javaClass.simpleName
                 items = emptyList()
@@ -767,6 +773,7 @@ fun MagsApp() {
                         favs.isEmpty() -> CenterHint("还没有收藏\n在搜索结果里点「☆ 收藏」就会出现在这里")
                         else -> LazyColumn(
                             Modifier.fillMaxSize(),
+                            state = favListState,
                             contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 104.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
@@ -820,6 +827,7 @@ fun MagsApp() {
                     items.isEmpty() -> CenterHint("没结果，换个关键词试试")
                     else -> LazyColumn(
                         Modifier.fillMaxSize(),
+                        state = listState,
                         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 104.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
