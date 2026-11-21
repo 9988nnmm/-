@@ -918,8 +918,8 @@ private fun ResultCard(
         ) {
             ActionBtn(backdrop, "磁力链接", true, Modifier.weight(1f), onCopy)
             ActionBtn(backdrop, "查字幕", false, Modifier.weight(1f), onSub)
-            ActionBtn(backdrop, if (item.fav) "已收藏" else "☆ 收藏", false, Modifier.weight(1f), onFav)
-            ActionBtn(backdrop, if (item.added) "已投光鸭" else "＋光鸭", false, Modifier.weight(1f), onAdd)
+            ActionBtn(backdrop, if (item.fav) "已收藏" else "收藏", false, Modifier.weight(1f), onFav)
+            ActionBtn(backdrop, if (item.added) "已投光鸭" else "投光鸭", false, Modifier.weight(1f), onAdd)
         }
         if (item.note.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
@@ -961,16 +961,20 @@ private fun ActionBtn(
         // 文字切换（收藏 → 已收藏）走淡入淡出，不要"啪"一下换掉
         Crossfade(
             targetState = label,
-            animationSpec = tween(durationMillis = 220),
+            animationSpec = tween(durationMillis = 200),
             label = "actionLabel"
         ) { txt ->
+            // 固定占满按钮宽度并居中：两段文字宽度不同也不会让内容跳
             BasicText(
                 txt,
                 style = ts(
                     12.5f,
                     if (primary) Color.White else Color(0xF2E4ECFF),
                     if (primary) FontWeight.Bold else FontWeight.Medium
-                )
+                ).copy(
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                ),
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
