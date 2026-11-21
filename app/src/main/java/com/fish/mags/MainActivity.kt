@@ -912,11 +912,14 @@ private fun ResultCard(
             else if (item.fav) MiniTag("★", Color(0x33FDBA74), Color(0xFFFED7AA))
         }
         Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ActionBtn(backdrop, "磁力链接", true, onCopy)
-            ActionBtn(backdrop, "查字幕", false, onSub)
-            ActionBtn(backdrop, if (item.fav) "已收藏" else "☆ 收藏", false, onFav)
-            ActionBtn(backdrop, if (item.added) "已投光鸭" else "＋光鸭", false, onAdd)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ActionBtn(backdrop, "磁力链接", true, Modifier.weight(1f), onCopy)
+            ActionBtn(backdrop, "查字幕", false, Modifier.weight(1f), onSub)
+            ActionBtn(backdrop, if (item.fav) "已收藏" else "☆ 收藏", false, Modifier.weight(1f), onFav)
+            ActionBtn(backdrop, if (item.added) "已投光鸭" else "＋光鸭", false, Modifier.weight(1f), onAdd)
         }
         if (item.note.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
@@ -933,10 +936,13 @@ private fun MiniTag(txt: String, bg: Color, fg: Color) {
 }
 
 @Composable
-private fun ActionBtn(backdrop: LayerBackdrop, label: String, primary: Boolean, onClick: () -> Unit) {
+private fun ActionBtn(
+    backdrop: LayerBackdrop, label: String, primary: Boolean,
+    modifier: Modifier = Modifier, onClick: () -> Unit
+) {
     val ir = remember { MutableInteractionSource() }
     Box(
-        Modifier
+        modifier
             .pressBounce(ir)
             .drawBackdrop(
                 backdrop = backdrop,
