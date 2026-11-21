@@ -11,6 +11,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -18,6 +19,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.*
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -710,6 +712,7 @@ fun MagsApp() {
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             item {
+                    }
                                 if (favMsg.isNotEmpty()) BasicText(favMsg, style = ts(12f, Color(0xFFFBCFE8)))
                             }
                             itemsIndexed(favs) { idx, it ->
@@ -757,14 +760,21 @@ fun MagsApp() {
                     err != null -> CenterHint("连不上服务\n$err\n\n检查常开机上的 mags 是否在跑")
                     loading && items.isEmpty() -> CenterHint("搜索中…")
                     items.isEmpty() -> CenterHint("没结果，换个关键词试试")
-                    else -> LazyColumn(
+                    else -> {
+                        val listState = rememberLazyListState()
+                        // 滚动中降级：lens/vibrancy 每帧重算背景，是掉帧主因
+                        val scrolling by remember {
+                            derivedStateOf { listState.isScrollInProgress }
+                        }
+                        LazyColumn(
                         Modifier.fillMaxSize(),
+                        state = listState,
                         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 104.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         itemsIndexed(items) { idx, it ->
                             ResultCard(
-                                backdrop, it, idx,
+                                backdrop, it, idx, scrolling,
                                 onCopy = {
                                     clip.setText(AnnotatedString(it.magnet))
                                 },
@@ -876,7 +886,7 @@ private fun PagBtn(label: String, enabled: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun ResultCard(
-    backdrop: LayerBackdrop, item: Item, idx: Int,
+    backdrop: LayerBackdrop, item: Item, idx: Int, scrolling: Boolean = false,
     onCopy: () -> Unit, onFav: () -> Unit, onSub: () -> Unit, onAdd: () -> Unit
 ) {
     Column(
@@ -885,7 +895,16 @@ private fun ResultCard(
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { RoundedCornerShape(22.dp) },
-                effects = { vibrancy(); blur(2.dp.toPx()); lens(11.dp.toPx(), 20.dp.toPx()) }
+                effects = {
+                    if (scrolling) {
+                        // 滑动中：只留一层很轻的模糊，先保住 60fps
+                        blur(1.5.dp.toPx())
+                    } else {
+                        vibrancy()
+                        blur(2.dp.toPx())
+                        lens(11.dp.toPx(), 20.dp.toPx())
+                    }
+                }
             )
             .padding(15.dp)
     ) {
