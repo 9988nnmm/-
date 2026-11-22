@@ -77,6 +77,7 @@ import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.colorControls
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -134,8 +135,12 @@ data class Look(
     val depth: Boolean = true,      // 深度效果
     val contrast: Int = 1,          // 0 较低 / 1 默认 / 2 较高
     val saturation: Int = 1,
-    val flowColor: Boolean = true   // 跟随壁纸取强调色
+    val flowColor: Boolean = true,  // 跟随壁纸取强调色
+    val dim: Int = 1                // 背景压暗：0 轻 / 1 中 / 2 重
 ) {
+    // 压暗系数：原来背景上是四层叠加（85% 黑 + 40% 黑 + 靛蓝紫），壁纸被压成藏青，
+    // 玻璃后面等于一片黑，透出来当然没有颜色。这里收成一层，强度可调。
+    val dimA: Float get() = when (dim) { 0 -> 0.30f; 1 -> 0.55f; else -> 0.85f }
     val scale: Float get() = when (refr) { 0 -> 0f; 1 -> 1f; else -> 1.75f }
     val con: Float get() = when (contrast) { 0 -> 0.93f; 1 -> 1.03f; else -> 1.16f }
     val sat: Float get() = when (saturation) { 0 -> 1.15f; 1 -> 1.5f; else -> 1.95f }
@@ -152,7 +157,8 @@ fun loadLook(ctx: Context): Look {
         depth = sp.getBoolean("lk_depth", true),
         contrast = sp.getInt("lk_con", 1),
         saturation = sp.getInt("lk_sat", 1),
-        flowColor = sp.getBoolean("lk_flow", true)
+        flowColor = sp.getBoolean("lk_flow", true),
+        dim = sp.getInt("lk_dim", 1)
     )
 }
 
@@ -164,6 +170,7 @@ fun saveLook(ctx: Context, l: Look) {
         .putInt("lk_con", l.contrast)
         .putInt("lk_sat", l.saturation)
         .putBoolean("lk_flow", l.flowColor)
+        .putInt("lk_dim", l.dim)
         .apply()
 }
 
@@ -178,6 +185,9 @@ private fun loadWall(ctx: Context): android.graphics.Bitmap? {
     while (bounds.outWidth / sample > 2160) sample *= 2
     return BitmapFactory.decodeFile(f.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample })
 }
+
+// 边缘高光：玻璃在花壁纸上要靠这一圈亮边才「立」得起来（FlowMix 的卡片也是这个感觉）
+private val GlassHi: () -> Highlight = { Highlight(width = 1.dp, blurRadius = 2.dp, alpha = 0.85f) }
 
 // 顶层常量：pointerInput 的 key 必须是稳定对象，否则每次重组都会重建手势
 private val SORT_OPTS_UI = listOf(
@@ -480,34 +490,27 @@ fun MagsApp() {
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            // 顶/底压暗，保证白字和玻璃有对比
+            // 压暗层：只留一层，强度跟随「背景压暗」设置。
+            // 原来这里是四层叠加（0xD9 深蓝 + 0x66 黑 + 靛蓝→紫渐变），
+            // 结果是壁纸被压成藏青、玻璃背后一片黑 —— 玻璃再好也透不出颜色。
+            val dimA = look.dimA
             Box(
                 Modifier.fillMaxSize().background(
                     Brush.verticalGradient(
-                        0f to Color(0xD90A0E1A),
-                        0.22f to Color(0xA60A0E1A),
-                        0.55f to Color(0x8C101A2E),
-                        0.82f to Color(0xB30A0E1A),
-                        1f to Color(0xE60A0E1A)
+                        0f to Color(0xFF0A0E1A).copy(alpha = 0.92f * dimA),
+                        0.18f to Color(0xFF0A0E1A).copy(alpha = 0.62f * dimA),
+                        0.45f to Color(0xFF101A2E).copy(alpha = 0.42f * dimA),
+                        0.80f to Color(0xFF0A0E1A).copy(alpha = 0.55f * dimA),
+                        1f to Color(0xFF0A0E1A).copy(alpha = 0.85f * dimA)
                     )
                 )
             )
-            // 顶部额外压暗（樱花最亮的地方压住，保证搜索栏可读）
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.verticalGradient(
-                        0f to Color(0x66000000),
-                        0.30f to Color(0x22000000),
-                        1f to Color(0x00000000)
-                    )
-                )
-            )
-            // 左侧冷色 + 右侧暖色的极淡叠加，让玻璃折射有色彩层次
+            // 极淡的冷暖分层，保留一点色彩层次，但不再染成藏青
             Box(
                 Modifier.fillMaxSize().background(
                     Brush.linearGradient(
-                        0f to Color(0x1A4F46E5),
-                        1f to Color(0x147C3AED)
+                        0f to Color(0xFF4F46E5).copy(alpha = 0.07f * dimA),
+                        1f to Color(0xFFB45309).copy(alpha = 0.06f * dimA)
                     )
                 )
             )
@@ -523,7 +526,8 @@ fun MagsApp() {
                     .drawBackdrop(
                         backdrop = backdrop,
                         shape = { RoundedCornerShape(26.dp) },
-                        effects = { glass(Glass(8.dp, 8.dp, 16.dp)) }
+                        effects = { glass(Glass(8.dp, 8.dp, 16.dp)) },
+                        highlight = GlassHi
                     )
                     .clip(RoundedCornerShape(26.dp))
                     .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)
@@ -769,7 +773,8 @@ fun MagsApp() {
                             .drawBackdrop(
                                 backdrop = backdrop,
                                 shape = { RoundedCornerShape(23.dp) },
-                                effects = { glass(Glass(3.dp, 9.dp, 18.dp)) }
+                                effects = { glass(Glass(3.dp, 9.dp, 18.dp)) },
+                                highlight = GlassHi
                             )
                             .clip(RoundedCornerShape(23.dp))
                             .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(23.dp))
@@ -1158,6 +1163,9 @@ private fun SettingsPane(
             SegRow(backdrop, "饱和度", "同上，偏鲜艳或偏灰", listOf("较低", "默认", "较高"), look.saturation) { v ->
                 onChange(look.copy(saturation = v))
             }
+            SegRow(backdrop, "背景压暗", "压太狠壁纸就没颜色了，玻璃也就透不出东西", listOf("轻", "中", "重"), look.dim) { v ->
+                onChange(look.copy(dim = v))
+            }
 
             Spacer(Modifier.height(18.dp))
             SectionTitle("壁纸与配色")
@@ -1304,7 +1312,8 @@ private fun ResultCard(
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { RoundedCornerShape(22.dp) },
-                effects = { glass(Glass(2.dp, 11.dp, 20.dp)) }
+                effects = { glass(Glass(2.dp, 11.dp, 20.dp)) },
+                highlight = GlassHi
             )
             .padding(15.dp)
     ) {
