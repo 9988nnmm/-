@@ -801,7 +801,8 @@ fun MagsApp() {
                                 highlight = GlassHi
                             )
                             .clip(RoundedCornerShape(23.dp))
-                            .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(23.dp))
+                            .background(Color(0x7A090B10))          // 压一层深色，接近它的不透明度
+                            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(23.dp))
                             // 一个手势区同时处理：原地松手=点击，拖动=跟手
                             .pointerInput(tabPx) {
                                 awaitEachGesture {
@@ -907,8 +908,11 @@ fun MagsApp() {
                     if (ringA > 0.01f) {
                         Canvas(Modifier.fillMaxSize()) {
                             val cy = size.height / 2f
-                            val ringW = size.height * 1.42f      // 实测 210×150 的比例
-                            val ringH = size.height - 8.dp.toPx()
+                            val slotW2 = size.width / opts.size
+                            // 实测：环静止时 210×150（宽 1.4×高），但那是 5 档的下 1.2 档宽。
+                            // 我们 4 档更宽，取「档宽 78% 与 1.15×高」的较小值，才贴着字不糊一大片
+                            val ringW = minOf(size.height * 1.15f, slotW2 * 0.78f)
+                            val ringH = size.height - 12.dp.toPx()
                             val prog = (stretch / 0.7f).coerceIn(0f, 1f)
 
                             val ap = android.graphics.Path()
