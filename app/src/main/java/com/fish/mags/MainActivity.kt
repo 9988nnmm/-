@@ -777,12 +777,6 @@ fun MagsApp() {
                     var dragPos by remember { mutableFloatStateOf(idx.toFloat()) }
                     var stretch by remember { mutableFloatStateOf(0f) }   // 0..0.7，速度驱动的横向拉伸
 
-                    // sort 变了（含服务端回包）时把指示器对齐过去，避免两套状态打架
-                    LaunchedEffect(idx) {
-                        if (!dragging && kotlin.math.abs(ind.value - idx) > 0.01f) {
-                            ind.animateTo(idx.toFloat(), tween(190))
-                        }
-                    }
 
                     fun commit(i: Int) {
                         val key = opts[i.coerceIn(0, opts.size - 1)].first
@@ -812,18 +806,22 @@ fun MagsApp() {
                                     val startX = down.position.x
                                     var totalDx = 0f
                                     var moved = false
-                                    // 绝对跟手：手指按在哪，胶囊就出现在哪一档（FlowMix 也是这样）
                                     fun slotAt(px: Float) =
                                         (px / tabPx - 0.5f).coerceIn(0f, last)
-                                    dragPos = slotAt(startX)
-                                    dragging = true
+                                    // 按住时滑块留在原位：不因为手指落在别的项上就先跳过去
+                                    dragPos = ind.value
+                                    dragging = false
                                     while (true) {
                                         val ev = awaitPointerEvent()
                                         val ch = ev.changes.firstOrNull() ?: break
                                         if (!ch.pressed) break
                                         val dx = ch.position.x - ch.previousPosition.x
-                                        if (!moved && kotlin.math.abs(totalDx + dx) > 6f) moved = true
                                         totalDx += dx
+                                        // 超过横向阈值才进入拖动，之前一律当点按
+                                        if (!moved && kotlin.math.abs(totalDx) > 6f) {
+                                            moved = true
+                                            dragging = true
+                                        }
                                         if (moved) {
                                             ch.consume()
                                             dragPos = slotAt(ch.position.x)
@@ -838,6 +836,7 @@ fun MagsApp() {
                                     dragging = false
                                     // 吸附：150~220ms 减速，从当前画面位置接着走
                                     scope.launch {
+                                        if (moved) ind.snapTo(dragPos)   // 从屏幕上画着的位置接着走
                                         ind.animateTo(
                                             target.toFloat(),
                                             tween(if (moved) 190 else 210)
@@ -857,32 +856,22 @@ fun MagsApp() {
                             }
                     ) {
 
-                    // 唯一指示器：亮黄细边 + 淡暖内底 + 轻微光晕
+                    // 唯一指示器：玻璃滑块（透明内底 + 左上柔光 + 对侧暗边），不带黄描边
                     Canvas(Modifier.fillMaxSize()) {
                         val slotW = size.width / opts.size
                         val cy = size.height / 2f
                         val posF = if (dragging) dragPos else ind.value
 
-                        // 位置夹在首尾两项的实际中心之间 —— 越界靠夹取，不靠裁剪
+                        // 首尾按选项中心限位，不靠裁切
                         val cxMin = slotW * 0.5f + 2.dp.toPx()
                         val cxMax = size.width - slotW * 0.5f - 2.dp.toPx()
                         val cx = (slotW * (posF + 0.5f)).coerceIn(cxMin, cxMax)
 
-                        val baseW = minOf(size.height * 1.15f, slotW * 0.86f)
+                        // 宽度按槽位 80%，高度占栏高八成 —— 不按文字宽度套框
+                        val baseW = slotW * 0.80f
                         val wPx = (baseW * (1f + stretch))
                             .coerceAtMost(slotW - 4.dp.toPx())
-                        val hPx = size.height - 12.dp.toPx()
-
-                        // 光晕
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(accent.copy(alpha = 0.22f), accent.copy(alpha = 0f)),
-                                center = Offset(cx, cy),
-                                radius = wPx * 0.85f
-                            ),
-                            radius = wPx * 0.85f,
-                            center = Offset(cx, cy)
-                        )
+                        val hPx = size.height * 0.80f
 
                         val ap = android.graphics.Path()
                         PillMorph.toPath((stretch / 0.7f).coerceIn(0f, 1f), ap)
@@ -892,22 +881,55 @@ fun MagsApp() {
                         ap.transform(mtx)
                         val cp = ap.asComposePath()
 
-                        drawPath(cp, accent.copy(alpha = 0.10f))                    // 淡暖内底
-                        drawPath(cp, accent.copy(alpha = 0.92f), style = Stroke(1.6.dp.toPx()))
+                        // 1) 极淡内底：让滑块「存在」但不发黄雾
+                        drawPath(cp, Color.White.copy(alpha = 0.05f))
+
+                        // 2) 边：左上亮 → 右下暗，做出厚度和折射感（同一条路径上的一次渐变描边）
+                        drawPath(
+                            cp,
+                            brush = Brush.linearGradient(
+                                colorStops = arrayOf(
+                                    0.00f to Color.White.copy(alpha = 0.62f),
+                                    0.35f to Color.White.copy(alpha = 0.16f),
+                                    0.62f to Color.Black.copy(alpha = 0.10f),
+                                    1.00f to Color.Black.copy(alpha = 0.34f)
+                                ),
+                                start = Offset(cx - wPx * 0.5f, cy - hPx * 0.55f),
+                                end = Offset(cx + wPx * 0.5f, cy + hPx * 0.55f)
+                            ),
+                            style = Stroke(1.3.dp.toPx())
+                        )
+
+                        // 3) 左上沿一段弧形柔光（局部高光，不是整圈）
+                        drawArc(
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.55f),
+                                    Color.White.copy(alpha = 0f)
+                                ),
+                                start = Offset(cx - wPx * 0.42f, cy - hPx * 0.5f),
+                                end = Offset(cx + wPx * 0.05f, cy - hPx * 0.1f)
+                            ),
+                            startAngle = 165f,
+                            sweepAngle = 90f,
+                            useCenter = false,
+                            topLeft = Offset(cx - wPx * 0.5f, cy - hPx * 0.5f),
+                            size = androidx.compose.ui.geometry.Size(wPx, hPx),
+                            style = Stroke(2.2.dp.toPx())
+                        )
                     }
 
                     // 文字层（不拦截手势）
                     Row(Modifier.fillMaxSize()) {
+                        // 文字颜色跟着滑块走：离开就退黄，接近就变黄，停稳只亮当前项
+                        val focusPos = if (dragging) dragPos else ind.value
                         opts.forEachIndexed { i, (k, label) ->
-                            val selected = sort == k
-                            // 拖动经过哪一项，哪一项先亮（预高亮），但不改排序
-                            val hovered = dragging &&
-                                    dragPos.roundToInt().coerceIn(0, opts.size - 1) == i
-                            val on = selected || hovered
-                            val tc by animateColorAsState(
-                                if (on) accent else Color(0xE6E8EEFF),
-                                tween(180),
-                                label = "sortText_$k"
+                            val gap = kotlin.math.abs(focusPos - i).coerceIn(0f, 1f)
+                            val near = 1f - gap                       // 1 = 滑块正压在这一项
+                            val tc = androidx.compose.ui.graphics.lerp(
+                                Color(0xE6E8EEFF),
+                                accent,
+                                near * near
                             )
                             Box(
                                 Modifier.weight(1f).fillMaxHeight(),
@@ -917,7 +939,7 @@ fun MagsApp() {
                                     label,
                                     style = ts(
                                         13.5f, tc,
-                                        if (on) FontWeight.Bold else FontWeight.Medium
+                                        if (near > 0.5f) FontWeight.Bold else FontWeight.Medium
                                     )
                                 )
                             }
