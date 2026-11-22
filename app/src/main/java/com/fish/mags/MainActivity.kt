@@ -46,6 +46,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -775,6 +776,11 @@ fun MagsApp() {
                     // 照 FlowMix 逐帧实测重写：高亮环「中心连续跟手」，只按拖动速度横向拉伸，
                     // 高度不变。静止 210×150、快速拖动最大 350×150（≈1.7 倍），松手回落到档位中心。
                     var stretch by remember { mutableFloatStateOf(0f) }   // 0 = 原始宽度，0.7 = 1.7 倍
+                    // 1:1 复刻 FlowMix 的两层结构：
+                    //   灰色实心圆 = 当前选中（固定在该档中心，走 spring）
+                    //   黄色描边环 = 触摸指示器（跟手、morph 变形、松手淡出）
+                    var touchX by remember { mutableFloatStateOf(0f) }
+                    var touchOn by remember { mutableStateOf(false) }
 
                     fun commit(i: Int) {
                         val key = opts[i.coerceIn(0, opts.size - 1)].first
@@ -808,6 +814,8 @@ fun MagsApp() {
                                     var moved = false
                                     dragPos = startPos     // 跟手从当前位置开始，避免跳
                                     dragging = true
+                                    touchX = down.position.x
+                                    touchOn = true
                                     while (true) {
                                         val ev = awaitPointerEvent()
                                         val ch = ev.changes.firstOrNull() ?: break
@@ -820,6 +828,7 @@ fun MagsApp() {
                                             // 普通 state 赋值：每帧只触发一次重组，不起协程
                                             dragPos = (startPos + totalDx / tabPx)
                                                 .coerceIn(0f, last)
+                                            touchX = ch.position.x
                                             // 速度越快拉得越长，天花板 1.7 倍（实测值）
                                             stretch = (stretch * 0.55f +
                                                     kotlin.math.abs(dx) / tabPx * 2.4f)
@@ -837,6 +846,7 @@ fun MagsApp() {
                                                 spring(dampingRatio = 0.72f, stiffness = 420f)
                                             )
                                         }
+                                        touchOn = false
                                         commit(target)
                                         scope.launch {
                                             val s0 = stretch
@@ -868,33 +878,54 @@ fun MagsApp() {
                                                 spring(dampingRatio = 0.66f, stiffness = 340f)
                                             )
                                         }
+                                        touchOn = false
                                         commit(target)
                                     }
                                 }
                             }
                     ) {
 
-                    // 指示器：中心连续跟手；形状用 Morph 在「胶囊 ↔ 拉长胶囊」之间过渡
-                    val posF = if (dragging) dragPos else slide.value
+                    // ── 第一层：灰色实心圆（当前选中），跟 slide 走 spring ──
                     Canvas(Modifier.fillMaxSize()) {
                         val slotW = size.width / opts.size
-                        val cx = slotW * (posF + 0.5f)
                         val cy = size.height / 2f
-                        val wPx = slotW - 8.dp.toPx()
-                        val hPx = size.height - 8.dp.toPx()
+                        val selCx = slotW * (slide.value + 0.5f)
+                        val r = size.height / 2f - 5.dp.toPx()
+                        drawCircle(
+                            color = Color(0xE6BFC5CF),
+                            radius = r,
+                            center = Offset(selCx, cy)
+                        )
+                    }
 
-                        val prog = (stretch / 0.7f).coerceIn(0f, 1f)
-                        val ap = android.graphics.Path()
-                        PillMorph.toPath(prog, ap)
-                        val mtx = android.graphics.Matrix()
-                        // toPath 出来是单位形状（宽 1、高 0.62，中心在原点）
-                        mtx.postScale(wPx, hPx / 0.62f)
-                        mtx.postTranslate(cx, cy)
-                        ap.transform(mtx)
+                    // ── 第二层：黄色环（触摸），跟手 + morph，松手淡出 ──
+                    val ringA by animateFloatAsState(
+                        targetValue = if (touchOn || dragging) 1f else 0f,
+                        animationSpec = tween(if (touchOn || dragging) 60 else 220),
+                        label = "ringAlpha"
+                    )
+                    if (ringA > 0.01f) {
+                        Canvas(Modifier.fillMaxSize()) {
+                            val cy = size.height / 2f
+                            val ringW = size.height * 1.42f      // 实测 210×150 的比例
+                            val ringH = size.height - 8.dp.toPx()
+                            val prog = (stretch / 0.7f).coerceIn(0f, 1f)
 
-                        val cp = ap.asComposePath()
-                        drawPath(cp, accent.copy(alpha = 0.18f))
-                        drawPath(cp, accent.copy(alpha = 0.60f), style = Stroke(1.dp.toPx()))
+                            val ap = android.graphics.Path()
+                            PillMorph.toPath(prog, ap)
+                            val mtx = android.graphics.Matrix()
+                            mtx.postScale(ringW, ringH / 0.62f)
+                            mtx.postTranslate(touchX, cy)
+                            ap.transform(mtx)
+
+                            val cp = ap.asComposePath()
+                            drawPath(cp, accent.copy(alpha = 0.16f * ringA))
+                            drawPath(
+                                cp,
+                                accent.copy(alpha = 0.85f * ringA),
+                                style = Stroke(1.6.dp.toPx())
+                            )
+                        }
                     }
 
                     // 文字层（不拦截手势）
@@ -902,8 +933,8 @@ fun MagsApp() {
                         opts.forEach { (k, label) ->
                             val on = sort == k
                             val tc by animateColorAsState(
-                                if (on) accent.copy(alpha = 0.35f).compositeOver(Color.White)
-                                else Color(0xE6E8EEFF),
+                                // 选中项压在灰色实心圆上，用深色字才看得清（和它一致）
+                                if (on) Color(0xFF15181E) else Color(0xE6E8EEFF),
                                 tween(240),
                                 label = "sortText_$k"
                             )
