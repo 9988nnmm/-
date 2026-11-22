@@ -810,10 +810,12 @@ fun MagsApp() {
                                 awaitEachGesture {
                                     val down = awaitFirstDown(requireUnconsumed = false)
                                     val startX = down.position.x
-                                    val startPos = ind.value
                                     var totalDx = 0f
                                     var moved = false
-                                    dragPos = startPos          // 从当前画面位置起步，不跳
+                                    // 绝对跟手：手指按在哪，胶囊就出现在哪一档（FlowMix 也是这样）
+                                    fun slotAt(px: Float) =
+                                        (px / tabPx - 0.5f).coerceIn(0f, last)
+                                    dragPos = slotAt(startX)
                                     dragging = true
                                     while (true) {
                                         val ev = awaitPointerEvent()
@@ -824,8 +826,7 @@ fun MagsApp() {
                                         totalDx += dx
                                         if (moved) {
                                             ch.consume()
-                                            dragPos = (startPos + totalDx / tabPx)
-                                                .coerceIn(0f, last)
+                                            dragPos = slotAt(ch.position.x)
                                             stretch = (stretch * 0.55f +
                                                     kotlin.math.abs(dx) / tabPx * 2.4f)
                                                 .coerceIn(0f, 0.7f)
