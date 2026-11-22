@@ -802,6 +802,7 @@ fun MagsApp() {
                     var stretch by remember { mutableFloatStateOf(0f) }   // 0..0.7，速度驱动的横向拉伸
                     var moving by remember { mutableStateOf(false) }        // 动画中
                     var pendingTarget by remember { mutableFloatStateOf(idx.toFloat()) }
+                    var barShift by remember { mutableFloatStateOf(0f) }    // 底栏受力位移（绘制层）
 
 
                     fun commit(i: Int) {
@@ -819,6 +820,7 @@ fun MagsApp() {
                     // 容器
                     Box(
                         Modifier.fillMaxSize()
+                            .graphicsLayer { translationX = barShift }
                             .drawBackdrop(
                                 backdrop = backdrop,
                                 shape = { RoundedCornerShape(23.dp) },
@@ -853,6 +855,11 @@ fun MagsApp() {
                                         }
                                         if (moved) {
                                             ch.consume()
+                                            // 已经到端头还在往外推：底栏跟着让一点（1~2dp）
+                                            val rawSlot = ch.position.x / tabPx - 0.5f
+                                            val over = rawSlot - rawSlot.coerceIn(0f, last)
+                                            barShift = (over * tabPx * 0.10f)
+                                                .coerceIn(-2.dp.toPx(), 2.dp.toPx())
                                             dragPos = slotAt(ch.position.x)
                                             stretch = (stretch * 0.55f +
                                                     kotlin.math.abs(dx) / tabPx * 2.4f)
@@ -878,6 +885,15 @@ fun MagsApp() {
                                             tween(dur, easing = LinearOutSlowInEasing)
                                         )
                                         } finally { moving = false }
+                                    }
+                                    scope.launch {
+                                        val b0 = barShift
+                                        var kb = 0f
+                                        while (kb < 1f) {
+                                            delay(16); kb = (kb + 0.14f).coerceAtMost(1f)
+                                            barShift = b0 * (1f - kb) * (1f - kb)   // 平方收敛，一次到位
+                                        }
+                                        barShift = 0f
                                     }
                                     scope.launch {
                                         val s0 = stretch
@@ -912,13 +928,29 @@ fun MagsApp() {
                         val cy = size.height / 2f
                         val posF = if (dragging) dragPos else ind.value
 
-                        val cxMin = slotW * 0.5f + 2.dp.toPx()
-                        val cxMax = size.width - slotW * 0.5f - 2.dp.toPx()
-                        val cx = (slotW * (posF + 0.5f)).coerceIn(cxMin, cxMax)
-
+                        // ── 首尾「贴边」：只让外端向外长，内端不动 ──
+                        val inset = 2.dp.toPx()
                         val baseW = slotW * 0.80f
-                        val wPx = (baseW * (1f + stretch)).coerceAtMost(slotW - 4.dp.toPx())
-                        val hPx = size.height * 0.80f
+                        val w0 = (baseW * (1f + stretch)).coerceAtMost(slotW - 4.dp.toPx())
+                        val h0 = size.height * 0.80f
+                        val cxRaw = slotW * (posF + 0.5f)
+
+                        // 越靠近首项/末项，贴边程度连续插值（不是最后一帧才变形）
+                        val pullL = if (posF < 1f) (1f - posF).coerceIn(0f, 1f) else 0f
+                        val pullR = if (posF > last - 1f) (posF - (last - 1f)).coerceIn(0f, 1f) else 0f
+
+                        var l = cxRaw - w0 / 2f
+                        var r = cxRaw + w0 / 2f
+                        l -= ((l - inset).coerceAtLeast(0f)) * pullL     // 左边贴向栏内缘
+                        r += (((size.width - inset) - r).coerceAtLeast(0f)) * pullR
+                        l = l.coerceIn(inset, size.width - inset)
+                        r = r.coerceIn(inset, size.width - inset)
+
+                        val wPx = (r - l).coerceAtLeast(6.dp.toPx())
+                        // 贴边时上下轮廓也跟着靠向栏内缘
+                        val hPx = h0 + (size.height - 4.dp.toPx() - h0) *
+                                maxOf(pullL, pullR)
+                        val cx = (l + r) / 2f
 
                         val ap = android.graphics.Path()
                         PillMorph.toPath((stretch / 0.7f).coerceIn(0f, 1f), ap)
@@ -928,8 +960,9 @@ fun MagsApp() {
                         ap.transform(mtx)
                         val cp = ap.asComposePath()
 
-                        // 内底：几乎透明，只留一点存在感（不再压灰褐色遮罩）
-                        drawPath(cp, Color.White.copy(alpha = 0.03f))
+                        // 内底：中性半透明黑（不染黄），移动时让位给色带，停稳后恢复
+                        val darkA = 0.26f * (1f - 0.70f * bandOn)
+                        drawPath(cp, Color.Black.copy(alpha = darkA))
 
                         // 移动时：同一轮廓外侧加一圈主题色带（accent 随壁纸走，不写死金黄）
                         // 色带贴在玻璃边本身：内缘清楚（1.3dp 同宽），外缘只留一点内羽化，
