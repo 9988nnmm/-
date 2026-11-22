@@ -57,13 +57,16 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.BackdropEffectScope
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.colorControls
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import kotlinx.coroutines.Dispatchers
@@ -90,6 +93,27 @@ val ENDPOINTS = listOf(
 // 每台设备一个稳定的身份，首次启动生成后写进 SharedPreferences。
 // 服务端按它分桶存 history / fav / seen / added，这样不同设备的搜索记录互不干扰。
 @Volatile var DEV_UID: String = ""
+
+// ---------------- 液态玻璃参数 ----------------
+// 逆向 FlowMix(cn.ykload.flowmix) 得到：它用的是同一个作者的
+// Kyant0/AndroidLiquidGlass（backdrop 的血缘），差别只是把 lens() 的两个开关
+// —— depthEffect / chromaticAberration —— 打开了，另外用 colorControls 调对比度和饱和度。
+// 我们这边原来一直是 lens(h, amt) 的默认值（两个都是 false），所以只有「折射」没有「色散/厚度」。
+data class Glass(
+    val blur: Dp,
+    val height: Dp,
+    val amount: Dp,
+    val depth: Boolean = true,     // 深度效果：芯部按径向再位移一点，像块厚玻璃
+    val chromatic: Boolean = true, // 边缘色散：RGB 分七段采样，出彩虹边
+    val sat: Float = 1.5f,         // 和原来的 vibrancy() 等价
+    val con: Float = 1.03f
+)
+
+fun BackdropEffectScope.glass(g: Glass) {
+    colorControls(brightness = 0f, contrast = g.con, saturation = g.sat)
+    blur(g.blur.toPx())
+    lens(g.height.toPx(), g.amount.toPx(), depthEffect = g.depth, chromaticAberration = g.chromatic)
+}
 
 // 顶层常量：pointerInput 的 key 必须是稳定对象，否则每次重组都会重建手势
 private val SORT_OPTS_UI = listOf(
@@ -387,7 +411,7 @@ fun MagsApp() {
                     .drawBackdrop(
                         backdrop = backdrop,
                         shape = { RoundedCornerShape(26.dp) },
-                        effects = { vibrancy(); blur(8.dp.toPx()); lens(8.dp.toPx(), 16.dp.toPx()) }
+                        effects = { glass(Glass(8.dp, 8.dp, 16.dp)) }
                     )
                     .clip(RoundedCornerShape(26.dp))
                     .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)
@@ -427,7 +451,7 @@ fun MagsApp() {
                             .drawBackdrop(
                                 backdrop = backdrop,
                                 shape = { RoundedCornerShape(23.dp) },
-                                effects = { vibrancy(); blur(2.dp.toPx()); lens(9.dp.toPx(), 18.dp.toPx()) }
+                                effects = { glass(Glass(2.dp, 9.dp, 18.dp)) }
                             )
                             .clickable(interactionSource = searchIr, indication = null) {
                                 kb?.hide(); query = input; page = 1
@@ -536,7 +560,7 @@ fun MagsApp() {
                             .drawBackdrop(
                                 backdrop = backdrop,
                                 shape = { RoundedCornerShape(13.dp) },
-                                effects = { vibrancy(); blur(2.dp.toPx()); lens(6.dp.toPx(), 12.dp.toPx()) }
+                                effects = { glass(Glass(2.dp, 6.dp, 12.dp, chromatic = false)) }
                             )
                             .clip(RoundedCornerShape(13.dp))
                             .clickable(interactionSource = refreshIr, indication = null) {
@@ -563,7 +587,7 @@ fun MagsApp() {
                             .drawBackdrop(
                                 backdrop = backdrop,
                                 shape = { RoundedCornerShape(13.dp) },
-                                effects = { vibrancy(); blur(2.dp.toPx()); lens(6.dp.toPx(), 12.dp.toPx()) }
+                                effects = { glass(Glass(2.dp, 6.dp, 12.dp, chromatic = false)) }
                                 ).clip(RoundedCornerShape(13.dp))
                             .clickable(interactionSource = favIr, indication = null) {
                                 if (screen == "favs") screen = "list"
@@ -615,11 +639,7 @@ fun MagsApp() {
                             .drawBackdrop(
                                 backdrop = backdrop,
                                 shape = { RoundedCornerShape(23.dp) },
-                                effects = {
-                                    vibrancy()
-                                    blur(3.dp.toPx())
-                                    lens(9.dp.toPx(), 18.dp.toPx())
-                                }
+                                effects = { glass(Glass(3.dp, 9.dp, 18.dp)) }
                             )
                             .clip(RoundedCornerShape(23.dp))
                             .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(23.dp))
@@ -738,7 +758,7 @@ fun MagsApp() {
                             .drawBackdrop(
                                 backdrop = backdrop,
                                 shape = { RoundedCornerShape(21.dp) },
-                                effects = { vibrancy(); blur(2.dp.toPx()); lens(8.dp.toPx(), 16.dp.toPx()) }
+                                effects = { glass(Glass(2.dp, 8.dp, 16.dp)) }
                             )
                             .clip(RoundedCornerShape(21.dp))
                             .clickable(enabled = favs.isNotEmpty()) {
@@ -904,7 +924,7 @@ fun MagsApp() {
                     .drawBackdrop(
                         backdrop = backdrop,
                         shape = { RoundedCornerShape(22.dp) },
-                        effects = { vibrancy(); blur(3.dp.toPx()); lens(8.dp.toPx(), 16.dp.toPx()) }
+                        effects = { glass(Glass(3.dp, 8.dp, 16.dp)) }
                     )
                     .clip(RoundedCornerShape(22.dp))
                     .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(22.dp))
@@ -964,7 +984,7 @@ private fun ResultCard(
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { RoundedCornerShape(22.dp) },
-                effects = { vibrancy(); blur(2.dp.toPx()); lens(11.dp.toPx(), 20.dp.toPx()) }
+                effects = { glass(Glass(2.dp, 11.dp, 20.dp)) }
             )
             .padding(15.dp)
     ) {
@@ -1027,9 +1047,15 @@ private fun ActionBtn(
                 backdrop = backdrop,
                 shape = { RoundedCornerShape(13.dp) },
                 effects = {
-                    vibrancy()
-                    blur((if (primary) 2f else 5f).dp.toPx())
-                    lens(6.dp.toPx(), (if (primary) 12f else 9f).dp.toPx())
+                    glass(
+                        Glass(
+                            (if (primary) 2f else 5f).dp,
+                            (if (primary) 6f else 6f).dp,
+                            (if (primary) 12f else 9f).dp,
+                            depth = primary,
+                            chromatic = false
+                        )
+                    )
                 }
             )
             .clip(RoundedCornerShape(13.dp))
