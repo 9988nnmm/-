@@ -824,6 +824,15 @@ fun MagsApp() {
                                             )
                                         }
                                         commit(target)
+                                        scope.launch {
+                                            val s0 = stretch
+                                            var k = 0f
+                                            while (k < 1f) {
+                                                delay(16); k = (k + 0.11f).coerceAtMost(1f)
+                                                stretch = s0 * (1f - k)
+                                            }
+                                            stretch = 0f
+                                        }
                                     } else {
                                         scope.launch {
                                             val s0 = stretch
@@ -849,15 +858,6 @@ fun MagsApp() {
                                     }
                                 }
                             }
-                                        scope.launch {
-                                            val s0 = stretch
-                                            var k = 0f
-                                            while (k < 1f) {
-                                                delay(16); k = (k + 0.11f).coerceAtMost(1f)
-                                                stretch = s0 * (1f - k)
-                                            }
-                                            stretch = 0f
-                                        }
                     ) {
 
                     // 指示器：中心连续跟手，宽度按速度外扩（高度不动）
