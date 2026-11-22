@@ -800,7 +800,8 @@ fun MagsApp() {
                     var dragging by remember { mutableStateOf(false) }
                     var dragPos by remember { mutableFloatStateOf(idx.toFloat()) }
                     var stretch by remember { mutableFloatStateOf(0f) }   // 0..0.7，速度驱动的横向拉伸
-                    var moving by remember { mutableStateOf(false) }        // 动画中：外缘色带加强
+                    var moving by remember { mutableStateOf(false) }        // 动画中
+                    var pendingTarget by remember { mutableFloatStateOf(idx.toFloat()) }
 
 
                     fun commit(i: Int) {
@@ -866,6 +867,7 @@ fun MagsApp() {
                                     scope.launch {
                                         if (moved) ind.snapTo(dragPos)   // 从屏幕上画着的位置接着走
                                         moving = true
+                                        pendingTarget = target.toFloat()
                                         try {
                                         val dist = kotlin.math.abs(target - ind.value)
                                         // 相邻 160ms，跨多项最多 220ms；decelerate 起步不突兀
@@ -892,9 +894,17 @@ fun MagsApp() {
                     ) {
 
                     // 唯一指示器：静止 = 一道折射软边；移动 = 同一轮廓上加主题色环带
+                    // 色带强度：拖动时满值；吸附过程中按「离目标还剩多少」衰减，
+                    // 于是衰减和位移减速在最后一段自然重叠，不会到位后再单独熄一段灯。
+                    val remain = kotlin.math.abs(ind.value - pendingTarget)
+                    val bandTarget = when {
+                        dragging -> 1f
+                        moving -> (remain / 0.55f).coerceIn(0f, 1f)
+                        else -> 0f
+                    }
                     val bandOn by animateFloatAsState(
-                        targetValue = if (dragging || moving) 1f else 0f,
-                        animationSpec = tween(if (dragging || moving) 120 else 260),
+                        targetValue = bandTarget,
+                        animationSpec = tween(90),
                         label = "band"
                     )
                     Canvas(Modifier.fillMaxSize()) {
@@ -922,16 +932,18 @@ fun MagsApp() {
                         drawPath(cp, Color.White.copy(alpha = 0.03f))
 
                         // 移动时：同一轮廓外侧加一圈主题色带（accent 随壁纸走，不写死金黄）
+                        // 色带贴在玻璃边本身：内缘清楚（1.3dp 同宽），外缘只留一点内羽化，
+                        // 不再用 5.5dp 外扩描边，避免读成"胶囊外面套了一圈光"。
                         if (bandOn > 0.01f) {
                             drawPath(
                                 cp,
-                                accent.copy(alpha = 0.20f * bandOn),
-                                style = Stroke(5.5.dp.toPx())
+                                accent.copy(alpha = 0.26f * bandOn),
+                                style = Stroke(2.2.dp.toPx())
                             )
                             drawPath(
                                 cp,
-                                accent.copy(alpha = 0.62f * bandOn),
-                                style = Stroke(1.8.dp.toPx())
+                                accent.copy(alpha = 0.72f * bandOn),
+                                style = Stroke(1.3.dp.toPx())
                             )
                         }
 
@@ -940,15 +952,15 @@ fun MagsApp() {
                             cp,
                             brush = Brush.linearGradient(
                                 colorStops = arrayOf(
-                                    0.00f to Color.White.copy(alpha = 0.55f),
-                                    0.42f to Color.White.copy(alpha = 0.12f),
-                                    0.70f to Color.Black.copy(alpha = 0.12f),
-                                    1.00f to Color.Black.copy(alpha = 0.30f)
+                                    0.00f to Color.White.copy(alpha = 0.52f),
+                                    0.38f to Color.White.copy(alpha = 0.10f),
+                                    0.66f to Color.White.copy(alpha = 0.02f),
+                                    1.00f to Color.Black.copy(alpha = 0.10f)
                                 ),
                                 start = Offset(cx - wPx * 0.5f, cy - hPx * 0.55f),
                                 end = Offset(cx + wPx * 0.5f, cy + hPx * 0.55f)
                             ),
-                            style = Stroke(1.2.dp.toPx())
+                            style = Stroke(1.0.dp.toPx())
                         )
                     }
 
