@@ -861,9 +861,10 @@ fun MagsApp() {
                                             barShift = (over * tabPx * 0.10f)
                                                 .coerceIn(-2.dp.toPx(), 2.dp.toPx())
                                             dragPos = slotAt(ch.position.x)
+                                            // 跨项只留少量伸长（最多 +25%），不再拉成横跨两格
                                             stretch = (stretch * 0.55f +
-                                                    kotlin.math.abs(dx) / tabPx * 2.4f)
-                                                .coerceIn(0f, 0.7f)
+                                                    kotlin.math.abs(dx) / tabPx * 1.0f)
+                                                .coerceIn(0f, 0.25f)
                                         }
                                     }
                                     val target = (if (moved) dragPos
@@ -928,32 +929,27 @@ fun MagsApp() {
                         val cy = size.height / 2f
                         val posF = if (dragging) dragPos else ind.value
 
-                        // ── 首尾「贴边」：只让外端向外长，内端不动 ──
+                        // ── 四项共用同一套尺寸；贴边只靠落点外移 ──
                         val inset = 2.dp.toPx()
                         val baseW = slotW * 0.80f
-                        val w0 = (baseW * (1f + stretch)).coerceAtMost(slotW - 4.dp.toPx())
-                        val h0 = size.height * 0.80f
+                        val wPx = (baseW * (1f + stretch)).coerceAtMost(slotW - 4.dp.toPx())
+                        val hPx = size.height * 0.80f        // 高度恒定，不随贴边变化
                         val cxRaw = slotW * (posF + 0.5f)
 
-                        // 越靠近首项/末项，贴边程度连续插值（不是最后一帧才变形）
                         val pullL = if (posF < 1f) (1f - posF).coerceIn(0f, 1f) else 0f
                         val pullR = if (posF > last - 1f) (posF - (last - 1f)).coerceIn(0f, 1f) else 0f
 
-                        var l = cxRaw - w0 / 2f
-                        var r = cxRaw + w0 / 2f
-                        l -= ((l - inset).coerceAtLeast(0f)) * pullL     // 左边贴向栏内缘
-                        r += (((size.width - inset) - r).coerceAtLeast(0f)) * pullR
-                        l = l.coerceIn(inset, size.width - inset)
-                        r = r.coerceIn(inset, size.width - inset)
-
-                        val wPx = (r - l).coerceAtLeast(6.dp.toPx())
-                        // 贴边时上下轮廓也跟着靠向栏内缘
-                        val hPx = h0 + (size.height - 4.dp.toPx() - h0) *
-                                maxOf(pullL, pullR)
-                        val cx = (l + r) / 2f
+                        // 落点最多外移 8dp：靠近端头时胶囊整体朝外挪，尺寸不变
+                        val hugMax = 8.dp.toPx()
+                        val half = wPx / 2f
+                        val minC = inset + half
+                        val maxC = size.width - inset - half
+                        val cxWant = cxRaw - hugMax * pullL + hugMax * pullR
+                        val cx = if (minC <= maxC) cxWant.coerceIn(minC, maxC)
+                                 else size.width / 2f
 
                         val ap = android.graphics.Path()
-                        PillMorph.toPath((stretch / 0.7f).coerceIn(0f, 1f), ap)
+                        PillMorph.toPath((stretch / 0.25f).coerceIn(0f, 1f), ap)
                         val mtx = android.graphics.Matrix()
                         mtx.postScale(wPx, hPx / 0.62f)
                         mtx.postTranslate(cx, cy)
@@ -985,10 +981,10 @@ fun MagsApp() {
                             cp,
                             brush = Brush.linearGradient(
                                 colorStops = arrayOf(
-                                    0.00f to Color.White.copy(alpha = 0.52f),
-                                    0.38f to Color.White.copy(alpha = 0.10f),
-                                    0.66f to Color.White.copy(alpha = 0.02f),
-                                    1.00f to Color.Black.copy(alpha = 0.10f)
+                                    0.00f to Color.White.copy(alpha = 0.44f),
+                                    0.38f to Color.White.copy(alpha = 0.08f),
+                                    0.66f to Color.White.copy(alpha = 0.01f),
+                                    1.00f to Color.Black.copy(alpha = 0.06f)
                                 ),
                                 start = Offset(cx - wPx * 0.5f, cy - hPx * 0.55f),
                                 end = Offset(cx + wPx * 0.5f, cy + hPx * 0.55f)
