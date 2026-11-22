@@ -769,18 +769,20 @@ fun MagsApp() {
                     val tabPx = with(androidx.compose.ui.platform.LocalDensity.current) {
                         tabW.toPx()
                     }
-                    val slide = remember { Animatable(idx.toFloat()) }
+                    // ── 单一指示器 ──────────────────────────────────────────
+                    // 只有一个位置真源 ind（档位坐标，0..last 连续值）：空闲时落在选中项，
+                    // 拖动时跟手，松手吸附到目标项。不再有第二颗圆点补位。
+                    val ind = remember { Animatable(idx.toFloat()) }
                     var dragging by remember { mutableStateOf(false) }
                     var dragPos by remember { mutableFloatStateOf(idx.toFloat()) }
+                    var stretch by remember { mutableFloatStateOf(0f) }   // 0..0.7，速度驱动的横向拉伸
 
-                    // 照 FlowMix 逐帧实测重写：高亮环「中心连续跟手」，只按拖动速度横向拉伸，
-                    // 高度不变。静止 210×150、快速拖动最大 350×150（≈1.7 倍），松手回落到档位中心。
-                    var stretch by remember { mutableFloatStateOf(0f) }   // 0 = 原始宽度，0.7 = 1.7 倍
-                    // 1:1 复刻 FlowMix 的两层结构：
-                    //   灰色实心圆 = 当前选中（固定在该档中心，走 spring）
-                    //   黄色描边环 = 触摸指示器（跟手、morph 变形、松手淡出）
-                    var touchX by remember { mutableFloatStateOf(0f) }
-                    var touchOn by remember { mutableStateOf(false) }
+                    // sort 变了（含服务端回包）时把指示器对齐过去，避免两套状态打架
+                    LaunchedEffect(idx) {
+                        if (!dragging && kotlin.math.abs(ind.value - idx) > 0.01f) {
+                            ind.animateTo(idx.toFloat(), tween(190))
+                        }
+                    }
 
                     fun commit(i: Int) {
                         val key = opts[i.coerceIn(0, opts.size - 1)].first
@@ -806,17 +808,13 @@ fun MagsApp() {
                             // 一个手势区同时处理：原地松手=点击，拖动=跟手
                             .pointerInput(tabPx) {
                                 awaitEachGesture {
-                                    val down = awaitFirstDown(
-                                        requireUnconsumed = false
-                                    )
+                                    val down = awaitFirstDown(requireUnconsumed = false)
                                     val startX = down.position.x
-                                    val startPos = slide.value
+                                    val startPos = ind.value
                                     var totalDx = 0f
                                     var moved = false
-                                    dragPos = startPos     // 跟手从当前位置开始，避免跳
+                                    dragPos = startPos          // 从当前画面位置起步，不跳
                                     dragging = true
-                                    touchX = down.position.x
-                                    touchOn = true
                                     while (true) {
                                         val ev = awaitPointerEvent()
                                         val ch = ev.changes.firstOrNull() ?: break
@@ -826,120 +824,88 @@ fun MagsApp() {
                                         totalDx += dx
                                         if (moved) {
                                             ch.consume()
-                                            // 普通 state 赋值：每帧只触发一次重组，不起协程
                                             dragPos = (startPos + totalDx / tabPx)
                                                 .coerceIn(0f, last)
-                                            touchX = ch.position.x
-                                            // 速度越快拉得越长，天花板 1.7 倍（实测值）
                                             stretch = (stretch * 0.55f +
                                                     kotlin.math.abs(dx) / tabPx * 2.4f)
                                                 .coerceIn(0f, 0.7f)
                                         }
                                     }
-                                    if (!moved) {
-                                        // 点选：归到最近档位，滑过去
-                                        dragging = false
-                                        val target = (startX / tabPx - 0.5f)
-                                            .roundToInt().coerceIn(0, opts.size - 1)
-                                        scope.launch {
-                                            slide.animateTo(
-                                                target.toFloat(),
-                                                spring(dampingRatio = 0.72f, stiffness = 420f)
-                                            )
-                                        }
-                                        touchOn = false
-                                        commit(target)
-                                        scope.launch {
-                                            val s0 = stretch
-                                            var k = 0f
-                                            while (k < 1f) {
-                                                delay(16); k = (k + 0.11f).coerceAtMost(1f)
-                                                stretch = s0 * (1f - k)
-                                            }
-                                            stretch = 0f
-                                        }
-                                    } else {
-                                        scope.launch {
-                                            val s0 = stretch
-                                            var k = 0f
-                                            while (k < 1f) {
-                                                delay(16); k = (k + 0.11f).coerceAtMost(1f)
-                                                stretch = s0 * (1f - k)
-                                            }
-                                            stretch = 0f
-                                        }
-                                        // 拖动松手：吸附到最近档位（限位）
-                                        val target = dragPos.roundToInt()
-                                            .coerceIn(0, opts.size - 1)
-                                        scope.launch {
-                                            slide.snapTo(dragPos)   // 从松手处接着走，不跳
-                                            dragging = false        // snap 之后再交还控制权
-                                            slide.animateTo(
-                                                target.toFloat(),
-                                                spring(dampingRatio = 0.66f, stiffness = 340f)
-                                            )
-                                        }
-                                        touchOn = false
-                                        commit(target)
+                                    val target = (if (moved) dragPos
+                                                  else startX / tabPx - 0.5f)
+                                        .roundToInt().coerceIn(0, opts.size - 1)
+                                    dragging = false
+                                    // 吸附：150~220ms 减速，从当前画面位置接着走
+                                    scope.launch {
+                                        ind.animateTo(
+                                            target.toFloat(),
+                                            tween(if (moved) 190 else 210)
+                                        )
                                     }
+                                    scope.launch {
+                                        val s0 = stretch
+                                        var k = 0f
+                                        while (k < 1f) {
+                                            delay(16); k = (k + 0.10f).coerceAtMost(1f)
+                                            stretch = s0 * (1f - k)
+                                        }
+                                        stretch = 0f
+                                    }
+                                    commit(target)      // 真正改排序只在这里发生一次
                                 }
                             }
                     ) {
 
-                    // ── 第一层：灰色实心圆（当前选中），跟 slide 走 spring ──
+                    // 唯一指示器：亮黄细边 + 淡暖内底 + 轻微光晕
                     Canvas(Modifier.fillMaxSize()) {
                         val slotW = size.width / opts.size
                         val cy = size.height / 2f
-                        val selCx = slotW * (slide.value + 0.5f)
-                        val r = size.height / 2f - 5.dp.toPx()
+                        val posF = if (dragging) dragPos else ind.value
+
+                        // 位置夹在首尾两项的实际中心之间 —— 越界靠夹取，不靠裁剪
+                        val cxMin = slotW * 0.5f + 2.dp.toPx()
+                        val cxMax = size.width - slotW * 0.5f - 2.dp.toPx()
+                        val cx = (slotW * (posF + 0.5f)).coerceIn(cxMin, cxMax)
+
+                        val baseW = minOf(size.height * 1.15f, slotW * 0.86f)
+                        val wPx = (baseW * (1f + stretch))
+                            .coerceAtMost(slotW - 4.dp.toPx())
+                        val hPx = size.height - 12.dp.toPx()
+
+                        // 光晕
                         drawCircle(
-                            color = Color(0xE6BFC5CF),
-                            radius = r,
-                            center = Offset(selCx, cy)
+                            brush = Brush.radialGradient(
+                                colors = listOf(accent.copy(alpha = 0.22f), accent.copy(alpha = 0f)),
+                                center = Offset(cx, cy),
+                                radius = wPx * 0.85f
+                            ),
+                            radius = wPx * 0.85f,
+                            center = Offset(cx, cy)
                         )
-                    }
 
-                    // ── 第二层：黄色环（触摸），跟手 + morph，松手淡出 ──
-                    val ringA by animateFloatAsState(
-                        targetValue = if (touchOn || dragging) 1f else 0f,
-                        animationSpec = tween(if (touchOn || dragging) 60 else 220),
-                        label = "ringAlpha"
-                    )
-                    if (ringA > 0.01f) {
-                        Canvas(Modifier.fillMaxSize()) {
-                            val cy = size.height / 2f
-                            val slotW2 = size.width / opts.size
-                            // 实测：环静止时 210×150（宽 1.4×高），但那是 5 档的下 1.2 档宽。
-                            // 我们 4 档更宽，取「档宽 78% 与 1.15×高」的较小值，才贴着字不糊一大片
-                            val ringW = minOf(size.height * 1.15f, slotW2 * 0.78f)
-                            val ringH = size.height - 12.dp.toPx()
-                            val prog = (stretch / 0.7f).coerceIn(0f, 1f)
+                        val ap = android.graphics.Path()
+                        PillMorph.toPath((stretch / 0.7f).coerceIn(0f, 1f), ap)
+                        val mtx = android.graphics.Matrix()
+                        mtx.postScale(wPx, hPx / 0.62f)
+                        mtx.postTranslate(cx, cy)
+                        ap.transform(mtx)
+                        val cp = ap.asComposePath()
 
-                            val ap = android.graphics.Path()
-                            PillMorph.toPath(prog, ap)
-                            val mtx = android.graphics.Matrix()
-                            mtx.postScale(ringW, ringH / 0.62f)
-                            mtx.postTranslate(touchX, cy)
-                            ap.transform(mtx)
-
-                            val cp = ap.asComposePath()
-                            drawPath(cp, accent.copy(alpha = 0.16f * ringA))
-                            drawPath(
-                                cp,
-                                accent.copy(alpha = 0.85f * ringA),
-                                style = Stroke(1.6.dp.toPx())
-                            )
-                        }
+                        drawPath(cp, accent.copy(alpha = 0.10f))                    // 淡暖内底
+                        drawPath(cp, accent.copy(alpha = 0.92f), style = Stroke(1.6.dp.toPx()))
                     }
 
                     // 文字层（不拦截手势）
                     Row(Modifier.fillMaxSize()) {
-                        opts.forEach { (k, label) ->
-                            val on = sort == k
+                        opts.forEachIndexed { i, (k, label) ->
+                            val selected = sort == k
+                            // 拖动经过哪一项，哪一项先亮（预高亮），但不改排序
+                            val hovered = dragging &&
+                                    dragPos.roundToInt().coerceIn(0, opts.size - 1) == i
+                            val on = selected || hovered
                             val tc by animateColorAsState(
-                                // 选中项压在灰色实心圆上，用深色字才看得清（和它一致）
-                                if (on) Color(0xFF15181E) else Color(0xE6E8EEFF),
-                                tween(240),
+                                if (on) accent else Color(0xE6E8EEFF),
+                                tween(180),
                                 label = "sortText_$k"
                             )
                             Box(
