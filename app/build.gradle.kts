@@ -12,10 +12,23 @@ android {
         applicationId = "com.fish.mags.glass"
         minSdk = 33
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.7-device-uid"
+        versionCode = 8
+        versionName = "0.8-fixed-key"
     }
-    buildTypes { release { isMinifyEnabled = false } }
+    // 固定签名：keystore 就在模块目录里。签名稳定之后才能覆盖安装，
+    // 否则每次云端构建的 debug keystore 都不同，装新包必须先卸载（会丢掉设备 UUID）。
+    signingConfigs {
+        create("mags") {
+            storeFile = file("mags.jks")
+            storePassword = "123456"
+            keyAlias = "mags"
+            keyPassword = "123456"
+        }
+    }
+    buildTypes {
+        release { isMinifyEnabled = false }
+        debug { signingConfig = signingConfigs.getByName("mags") }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
