@@ -411,7 +411,7 @@ fun MagsApp() {
                     .drawBackdrop(
                         backdrop = backdrop,
                         shape = { RoundedCornerShape(26.dp) },
-                        effects = { glass(Glass(8.dp, 8.dp, 40.dp)) }
+                        effects = { glass(Glass(8.dp, 8.dp, 16.dp)) }
                     )
                     .clip(RoundedCornerShape(26.dp))
                     .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)
