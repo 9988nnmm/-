@@ -758,13 +758,11 @@ fun MagsApp() {
                     var dragging by remember { mutableStateOf(false) }
                     var dragPos by remember { mutableFloatStateOf(idx.toFloat()) }
 
-                    // FlowMix 那个"果冻"不是旋转，也不是 scale：是把指示器在「出发档位」和
-                    // 「手指当前位置」之间画成一整个胶囊（录屏拆帧：长宽比 1.2 → 6 倍），
-                    // 松手后 slide 弹回目标档，跨度自然收成 1 格 —— 所以不需要额外动画。
-                    var anchor by remember { mutableFloatStateOf(idx.toFloat()) }
+                    // 照 FlowMix 逐帧实测重写：高亮环「中心连续跟手」，只按拖动速度横向拉伸，
+                    // 高度不变。静止 210×150、快速拖动最大 350×150（≈1.7 倍），松手回落到档位中心。
+                    var stretch by remember { mutableFloatStateOf(0f) }   // 0 = 原始宽度，0.7 = 1.7 倍
 
                     fun commit(i: Int) {
-                        anchor = i.coerceIn(0, opts.size - 1).toFloat()
                         val key = opts[i.coerceIn(0, opts.size - 1)].first
                         if (key != sort) {
                             sort = key
@@ -808,6 +806,10 @@ fun MagsApp() {
                                             // 普通 state 赋值：每帧只触发一次重组，不起协程
                                             dragPos = (startPos + totalDx / tabPx)
                                                 .coerceIn(0f, last)
+                                            // 速度越快拉得越长，天花板 1.7 倍（实测值）
+                                            stretch = (stretch * 0.55f +
+                                                    kotlin.math.abs(dx) / tabPx * 2.4f)
+                                                .coerceIn(0f, 0.7f)
                                         }
                                     }
                                     if (!moved) {
@@ -823,6 +825,15 @@ fun MagsApp() {
                                         }
                                         commit(target)
                                     } else {
+                                        scope.launch {
+                                            val s0 = stretch
+                                            var k = 0f
+                                            while (k < 1f) {
+                                                delay(16); k = (k + 0.11f).coerceAtMost(1f)
+                                                stretch = s0 * (1f - k)
+                                            }
+                                            stretch = 0f
+                                        }
                                         // 拖动松手：吸附到最近档位（限位）
                                         val target = dragPos.roundToInt()
                                             .coerceIn(0, opts.size - 1)
@@ -838,18 +849,25 @@ fun MagsApp() {
                                     }
                                 }
                             }
+                                        scope.launch {
+                                            val s0 = stretch
+                                            var k = 0f
+                                            while (k < 1f) {
+                                                delay(16); k = (k + 0.11f).coerceAtMost(1f)
+                                                stretch = s0 * (1f - k)
+                                            }
+                                            stretch = 0f
+                                        }
                     ) {
 
-                    // 指示器：拖动时从出发档到手指位置连成一条胶囊（这就是那个"果冻"）
+                    // 指示器：中心连续跟手，宽度按速度外扩（高度不动）
                     val posF = if (dragging) dragPos else slide.value
-                    val lo = kotlin.math.min(anchor, posF)
-                    val hi = kotlin.math.max(anchor, posF)
-                    // 跨度封顶 2.2 格：远距离跳档时不至于瞬间糊满整条
-                    val spanSlots = ((hi - lo) + 1f).coerceAtMost(2.2f)
+                    val baseW = tabW - 8.dp
+                    val wideDp = baseW * (1f + stretch)
                     Box(
                         Modifier
-                            .offset(x = tabW * lo + 4.dp)
-                            .width(tabW * spanSlots - 8.dp)
+                            .offset(x = tabW * (posF + 0.5f) - wideDp / 2f)
+                            .width(wideDp)
                             .fillMaxHeight()
                             .padding(vertical = 4.dp)
                             .clip(RoundedCornerShape(19.dp))
