@@ -12,8 +12,8 @@ android {
         applicationId = "com.fish.mags.glass"
         minSdk = 33
         targetSdk = 36
-        versionCode = 16
-        versionName = "1.4-jelly-measured"
+        versionCode = 17
+        versionName = "1.5-shape-morph"
     }
     // 固定签名：keystore 就在模块目录里。签名稳定之后才能覆盖安装，
     // 否则每次云端构建的 debug keystore 都不同，装新包必须先卸载（会丢掉设备 UUID）。
@@ -49,5 +49,6 @@ dependencies {
     implementation("org.jetbrains.compose.ui:ui-graphics:1.10.1")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.palette:palette-ktx:1.0.0")
+    implementation("androidx.graphics:graphics-shapes:1.0.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 }

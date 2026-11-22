@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -49,9 +50,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
+import androidx.graphics.shapes.Morph
+import androidx.graphics.shapes.RoundedPolygon
+import androidx.graphics.shapes.pill
+import androidx.graphics.shapes.toPath
 import androidx.palette.graphics.Palette
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -185,6 +192,13 @@ private fun loadWall(ctx: Context): android.graphics.Bitmap? {
     while (bounds.outWidth / sample > 2160) sample *= 2
     return BitmapFactory.decodeFile(f.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample })
 }
+
+// 指示器形状：FlowMix 用的是 androidx.graphics.shapes 的 RoundedPolygon + Morph
+// （反编译里能看到它把 List<RoundedPolygon> 两两配成 Morph，再 toPath(progress)）。
+// 这里照做：常态一个胶囊，拉长态一个更宽的胶囊，用 stretch 当 morph 进度。
+private val PillNormal by lazy { RoundedPolygon.pill(width = 1.0f, height = 0.62f) }
+private val PillWide by lazy { RoundedPolygon.pill(width = 1.34f, height = 0.62f) }
+private val PillMorph by lazy { Morph(PillNormal, PillWide) }
 
 // 边缘高光：玻璃在花壁纸上要靠这一圈亮边才「立」得起来（FlowMix 的卡片也是这个感觉）
 private val GlassHi: () -> Highlight = { Highlight(width = 1.dp, blurRadius = 2.dp, alpha = 0.85f) }
@@ -860,32 +874,28 @@ fun MagsApp() {
                             }
                     ) {
 
-                    // 指示器：中心连续跟手，宽度按速度外扩（高度不动）
+                    // 指示器：中心连续跟手；形状用 Morph 在「胶囊 ↔ 拉长胶囊」之间过渡
                     val posF = if (dragging) dragPos else slide.value
-                    val baseW = tabW - 8.dp
-                    val wideDp = baseW * (1f + stretch)
-                    Box(
-                        Modifier
-                            .offset(x = tabW * (posF + 0.5f) - wideDp / 2f)
-                            .width(wideDp)
-                            .fillMaxHeight()
-                            .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(19.dp))
-                            .drawBehind {
-                                drawRect(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(
-                                            accent.copy(alpha = 0.42f),
-                                            accent.copy(alpha = 0.15f),
-                                            accent.copy(alpha = 0f)
-                                        ),
-                                        center = center,
-                                        radius = size.maxDimension * 1.0f
-                                    )
-                                )
-                            }
-                            .border(1.dp, accent.copy(alpha = 0.60f), RoundedCornerShape(19.dp))
-                    )
+                    Canvas(Modifier.fillMaxSize()) {
+                        val slotW = size.width / opts.size
+                        val cx = slotW * (posF + 0.5f)
+                        val cy = size.height / 2f
+                        val wPx = slotW - 8.dp.toPx()
+                        val hPx = size.height - 8.dp.toPx()
+
+                        val prog = (stretch / 0.7f).coerceIn(0f, 1f)
+                        val ap = android.graphics.Path()
+                        PillMorph.toPath(prog, ap)
+                        val mtx = android.graphics.Matrix()
+                        // toPath 出来是单位形状（宽 1、高 0.62，中心在原点）
+                        mtx.postScale(wPx, hPx / 0.62f)
+                        mtx.postTranslate(cx, cy)
+                        ap.transform(mtx)
+
+                        val cp = ap.asComposePath()
+                        drawPath(cp, accent.copy(alpha = 0.18f))
+                        drawPath(cp, accent.copy(alpha = 0.60f), style = Stroke(1.dp.toPx()))
+                    }
 
                     // 文字层（不拦截手势）
                     Row(Modifier.fillMaxSize()) {
