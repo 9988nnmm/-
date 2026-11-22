@@ -12,8 +12,8 @@ android {
         applicationId = "com.fish.mags.glass"
         minSdk = 33
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.6-scroll-fix"
+        versionCode = 7
+        versionName = "0.7-device-uid"
     }
     buildTypes { release { isMinifyEnabled = false } }
     compileOptions {

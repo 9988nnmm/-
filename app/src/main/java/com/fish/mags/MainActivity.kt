@@ -87,6 +87,10 @@ val ENDPOINTS = listOf(
 
 @Volatile var activeBase: String? = null
 
+// 每台设备一个稳定的身份，首次启动生成后写进 SharedPreferences。
+// 服务端按它分桶存 history / fav / seen / added，这样不同设备的搜索记录互不干扰。
+@Volatile var DEV_UID: String = ""
+
 // 顶层常量：pointerInput 的 key 必须是稳定对象，否则每次重组都会重建手势
 private val SORT_OPTS_UI = listOf(
     "seed" to "种子", "size" to "大小", "date" to "时间", "name" to "名称"
@@ -115,6 +119,7 @@ suspend fun api(path: String): JSONObject = withContext(Dispatchers.IO) {
                 readTimeout = 100000
                 // 关掉自动重定向之外的隐式行为，失败要快
                 useCaches = false
+                if (DEV_UID.isNotEmpty()) setRequestProperty("X-Mags-Uid", DEV_UID)
             }
             try {
                 val txt = conn.inputStream.bufferedReader().use { it.readText() }
@@ -209,6 +214,11 @@ private fun ts(size: Float, color: Color = Color.White, weight: FontWeight = Fon
 class MainActivity : ComponentActivity() {
     override fun onCreate(s: Bundle?) {
         super.onCreate(s)
+        // 设备身份：只在本机生成一次，之后一直复用（卸载重装会换新的，相当于一台新设备）
+        val sp = getSharedPreferences("mags", MODE_PRIVATE)
+        DEV_UID = sp.getString("uid", null) ?: java.util.UUID.randomUUID().toString().also {
+            sp.edit().putString("uid", it).apply()
+        }
         setContent { MagsApp() }
     }
 }
