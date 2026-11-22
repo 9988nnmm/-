@@ -40,6 +40,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.Crossfade
@@ -208,6 +209,28 @@ private val GlassHi: () -> Highlight = { Highlight(width = 1.dp, blurRadius = 2.
 private val SORT_OPTS_UI = listOf(
     "seed" to "种子", "size" to "大小", "date" to "时间", "name" to "名称"
 )
+
+// 本地排序：换排序键时直接重排当前这批结果，不用等服务端
+private fun sizeBytes(s: String): Long {
+    val m = Regex("([0-9.]+)\\s*([KMGT]?)B", RegexOption.IGNORE_CASE).find(s) ?: return 0L
+    val v = m.groupValues[1].toDoubleOrNull() ?: return 0L
+    val mul = when (m.groupValues[2].uppercase()) {
+        "K" -> 1024L
+        "M" -> 1024L * 1024
+        "G" -> 1024L * 1024 * 1024
+        "T" -> 1024L * 1024 * 1024 * 1024
+        else -> 1L
+    }
+    return (v * mul).toLong()
+}
+
+private fun sortItems(list: List<Item>, key: String): List<Item> = when (key) {
+    "seed" -> list.sortedWith(compareByDescending<Item> { it.seed }.thenByDescending { it.date })
+    "size" -> list.sortedWith(compareByDescending<Item> { sizeBytes(it.size) })
+    "date" -> list.sortedWith(compareByDescending<Item> { it.date })
+    "name" -> list.sortedWith(compareBy<Item> { it.title })
+    else -> list
+}
 
 // ---------------- 数据层 ----------------
 
@@ -407,6 +430,7 @@ fun MagsApp() {
         scope.launch {
             try {
                 val (list, o) = doSearch(q, s, p, force)
+                if (s != sort) return@launch        // 排序已变，丢弃过期响应
                 items = list
                 total = o.optInt("total")
                 pages = o.optInt("pages", 1)
@@ -776,13 +800,17 @@ fun MagsApp() {
                     var dragging by remember { mutableStateOf(false) }
                     var dragPos by remember { mutableFloatStateOf(idx.toFloat()) }
                     var stretch by remember { mutableFloatStateOf(0f) }   // 0..0.7，速度驱动的横向拉伸
+                    var moving by remember { mutableStateOf(false) }        // 动画中：外缘色带加强
 
 
                     fun commit(i: Int) {
                         val key = opts[i.coerceIn(0, opts.size - 1)].first
-                        if (key != sort) {
-                            sort = key
-                            runSearch(query, key, 1)
+                        if (key == sort) return
+                        sort = key
+                        // 只是换排序：对当前这批结果本地重排，立刻生效，不打服务端
+                        if (items.isNotEmpty()) {
+                            items = sortItems(items, key)
+                            scope.launch { listState.scrollToItem(0) }
                         }
                     }
 
@@ -837,10 +865,17 @@ fun MagsApp() {
                                     // 吸附：150~220ms 减速，从当前画面位置接着走
                                     scope.launch {
                                         if (moved) ind.snapTo(dragPos)   // 从屏幕上画着的位置接着走
+                                        moving = true
+                                        try {
+                                        val dist = kotlin.math.abs(target - ind.value)
+                                        // 相邻 160ms，跨多项最多 220ms；decelerate 起步不突兀
+                                        val dur = (150 + 70 * (dist / last.coerceAtLeast(1f)))
+                                            .toInt().coerceIn(140, 220)
                                         ind.animateTo(
                                             target.toFloat(),
-                                            tween(if (moved) 190 else 210)
+                                            tween(dur, easing = LinearOutSlowInEasing)
                                         )
+                                        } finally { moving = false }
                                     }
                                     scope.launch {
                                         val s0 = stretch
@@ -856,21 +891,23 @@ fun MagsApp() {
                             }
                     ) {
 
-                    // 唯一指示器：玻璃滑块（透明内底 + 左上柔光 + 对侧暗边），不带黄描边
+                    // 唯一指示器：静止 = 一道折射软边；移动 = 同一轮廓上加主题色环带
+                    val bandOn by animateFloatAsState(
+                        targetValue = if (dragging || moving) 1f else 0f,
+                        animationSpec = tween(if (dragging || moving) 120 else 260),
+                        label = "band"
+                    )
                     Canvas(Modifier.fillMaxSize()) {
                         val slotW = size.width / opts.size
                         val cy = size.height / 2f
                         val posF = if (dragging) dragPos else ind.value
 
-                        // 首尾按选项中心限位，不靠裁切
                         val cxMin = slotW * 0.5f + 2.dp.toPx()
                         val cxMax = size.width - slotW * 0.5f - 2.dp.toPx()
                         val cx = (slotW * (posF + 0.5f)).coerceIn(cxMin, cxMax)
 
-                        // 宽度按槽位 80%，高度占栏高八成 —— 不按文字宽度套框
                         val baseW = slotW * 0.80f
-                        val wPx = (baseW * (1f + stretch))
-                            .coerceAtMost(slotW - 4.dp.toPx())
+                        val wPx = (baseW * (1f + stretch)).coerceAtMost(slotW - 4.dp.toPx())
                         val hPx = size.height * 0.80f
 
                         val ap = android.graphics.Path()
@@ -881,41 +918,37 @@ fun MagsApp() {
                         ap.transform(mtx)
                         val cp = ap.asComposePath()
 
-                        // 1) 极淡内底：让滑块「存在」但不发黄雾
-                        drawPath(cp, Color.White.copy(alpha = 0.05f))
+                        // 内底：几乎透明，只留一点存在感（不再压灰褐色遮罩）
+                        drawPath(cp, Color.White.copy(alpha = 0.03f))
 
-                        // 2) 边：左上亮 → 右下暗，做出厚度和折射感（同一条路径上的一次渐变描边）
+                        // 移动时：同一轮廓外侧加一圈主题色带（accent 随壁纸走，不写死金黄）
+                        if (bandOn > 0.01f) {
+                            drawPath(
+                                cp,
+                                accent.copy(alpha = 0.20f * bandOn),
+                                style = Stroke(5.5.dp.toPx())
+                            )
+                            drawPath(
+                                cp,
+                                accent.copy(alpha = 0.62f * bandOn),
+                                style = Stroke(1.8.dp.toPx())
+                            )
+                        }
+
+                        // 静止/始终在的一道折射软边：左上亮 → 右下暗，单一描边
                         drawPath(
                             cp,
                             brush = Brush.linearGradient(
                                 colorStops = arrayOf(
-                                    0.00f to Color.White.copy(alpha = 0.62f),
-                                    0.35f to Color.White.copy(alpha = 0.16f),
-                                    0.62f to Color.Black.copy(alpha = 0.10f),
-                                    1.00f to Color.Black.copy(alpha = 0.34f)
+                                    0.00f to Color.White.copy(alpha = 0.55f),
+                                    0.42f to Color.White.copy(alpha = 0.12f),
+                                    0.70f to Color.Black.copy(alpha = 0.12f),
+                                    1.00f to Color.Black.copy(alpha = 0.30f)
                                 ),
                                 start = Offset(cx - wPx * 0.5f, cy - hPx * 0.55f),
                                 end = Offset(cx + wPx * 0.5f, cy + hPx * 0.55f)
                             ),
-                            style = Stroke(1.3.dp.toPx())
-                        )
-
-                        // 3) 左上沿一段弧形柔光（局部高光，不是整圈）
-                        drawArc(
-                            brush = Brush.linearGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.55f),
-                                    Color.White.copy(alpha = 0f)
-                                ),
-                                start = Offset(cx - wPx * 0.42f, cy - hPx * 0.5f),
-                                end = Offset(cx + wPx * 0.05f, cy - hPx * 0.1f)
-                            ),
-                            startAngle = 165f,
-                            sweepAngle = 90f,
-                            useCenter = false,
-                            topLeft = Offset(cx - wPx * 0.5f, cy - hPx * 0.5f),
-                            size = androidx.compose.ui.geometry.Size(wPx, hPx),
-                            style = Stroke(2.2.dp.toPx())
+                            style = Stroke(1.2.dp.toPx())
                         )
                     }
 
