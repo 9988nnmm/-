@@ -1,16 +1,22 @@
 package com.fish.mags
 
 import android.graphics.BitmapFactory
+import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -41,7 +47,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
 import androidx.palette.graphics.Palette
@@ -110,9 +118,65 @@ data class Glass(
 )
 
 fun BackdropEffectScope.glass(g: Glass) {
-    colorControls(brightness = 0f, contrast = g.con, saturation = g.sat)
+    val l = LOOK
+    colorControls(brightness = 0f, contrast = l.con, saturation = l.sat)
     blur(g.blur.toPx())
-    lens(g.height.toPx(), g.amount.toPx(), depthEffect = g.depth, chromaticAberration = g.chromatic)
+    val k = l.scale
+    if (k <= 0f) return
+    lens(g.height.toPx() * k, g.amount.toPx() * k,
+        depthEffect = l.depth, chromaticAberration = g.chromatic && l.chromatic)
+}
+
+// ---------------- 外观设置（持久化在 SharedPreferences，纯客户端） ----------------
+data class Look(
+    val refr: Int = 1,              // 0 关闭 / 1 默认 / 2 增强
+    val chromatic: Boolean = true,  // 边缘色散
+    val depth: Boolean = true,      // 深度效果
+    val contrast: Int = 1,          // 0 较低 / 1 默认 / 2 较高
+    val saturation: Int = 1,
+    val flowColor: Boolean = true   // 跟随壁纸取强调色
+) {
+    val scale: Float get() = when (refr) { 0 -> 0f; 1 -> 1f; else -> 1.75f }
+    val con: Float get() = when (contrast) { 0 -> 0.93f; 1 -> 1.03f; else -> 1.16f }
+    val sat: Float get() = when (saturation) { 0 -> 1.15f; 1 -> 1.5f; else -> 1.95f }
+}
+
+// 绘制线程要读，用 @Volatile 而不进 Compose 状态；界面侧改了 look 会触发重组再同步过来
+@Volatile var LOOK = Look()
+
+fun loadLook(ctx: Context): Look {
+    val sp = ctx.getSharedPreferences("mags", Context.MODE_PRIVATE)
+    return Look(
+        refr = sp.getInt("lk_refr", 1),
+        chromatic = sp.getBoolean("lk_chr", true),
+        depth = sp.getBoolean("lk_depth", true),
+        contrast = sp.getInt("lk_con", 1),
+        saturation = sp.getInt("lk_sat", 1),
+        flowColor = sp.getBoolean("lk_flow", true)
+    )
+}
+
+fun saveLook(ctx: Context, l: Look) {
+    ctx.getSharedPreferences("mags", Context.MODE_PRIVATE).edit()
+        .putInt("lk_refr", l.refr)
+        .putBoolean("lk_chr", l.chromatic)
+        .putBoolean("lk_depth", l.depth)
+        .putInt("lk_con", l.contrast)
+        .putInt("lk_sat", l.saturation)
+        .putBoolean("lk_flow", l.flowColor)
+        .apply()
+}
+
+private fun wallFile(ctx: Context) = java.io.File(ctx.filesDir, "wallpaper.jpg")
+
+private fun loadWall(ctx: Context): android.graphics.Bitmap? {
+    val f = wallFile(ctx)
+    if (!f.exists()) return null
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(f.absolutePath, bounds)
+    var sample = 1
+    while (bounds.outWidth / sample > 2160) sample *= 2
+    return BitmapFactory.decodeFile(f.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample })
 }
 
 // 顶层常量：pointerInput 的 key 必须是稳定对象，否则每次重组都会重建手势
@@ -273,6 +337,38 @@ fun MagsApp() {
     var accent by remember { mutableStateOf(Color(0xFFFFD60A)) }   // 跟随壁纸的强调色
     var hist by remember { mutableStateOf(listOf<String>()) }
 
+    // 外观设置（客户端本地持久化）
+    var look by remember { mutableStateOf(loadLook(ctx)) }
+    LOOK = look
+    var wp by remember { mutableStateOf<ImageBitmap?>(null) }
+    var showSettings by remember { mutableStateOf(false) }
+
+    // 相册选图 → 压到 2160px 宽、存 filesDir，再拿它当壁纸和取色源
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) scope.launch {
+            try {
+                val bmp = withContext(Dispatchers.IO) {
+                    val ins = ctx.contentResolver.openInputStream(uri)
+                    val raw = ins?.use { BitmapFactory.decodeStream(it) }
+                    if (raw == null) null else {
+                        val maxW = 2160
+                        val scaled = if (raw.width > maxW)
+                            android.graphics.Bitmap.createScaledBitmap(raw, maxW, raw.height * maxW / raw.width, true)
+                        else raw
+                        java.io.FileOutputStream(wallFile(ctx)).use {
+                            scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, it)
+                        }
+                        scaled
+                    }
+                }
+                if (bmp != null) {
+                    wp = bmp.asImageBitmap()
+                    if (look.flowColor) accent = pickAccent(bmp)
+                }
+            } catch (_: Exception) { }
+        }
+    }
+
     // 列表滚动状态必须显式持有：不传 state 时 Compose 用的是内部默认实例，
     // 换页后内容变了但滚动位置会保留，导致「滑到底部翻页，新页直接停在底部」。
     val listState = rememberLazyListState()
@@ -332,12 +428,18 @@ fun MagsApp() {
     }
 
     LaunchedEffect(Unit) {
-        // 从背景图提取强调色（Flowmix 那种"跟随壁纸"）
+        // 壁纸 + 强调色：优先用用户自己选的图，没有就用内置樱花图
         try {
-            val bmp = withContext(Dispatchers.IO) {
-                BitmapFactory.decodeResource(ctx.resources, R.drawable.bg)
+            val wb = withContext(Dispatchers.IO) { loadWall(ctx) }
+            if (wb != null) {
+                wp = wb.asImageBitmap()
+                if (loadLook(ctx).flowColor) accent = pickAccent(wb)
+            } else {
+                val bmp = withContext(Dispatchers.IO) {
+                    BitmapFactory.decodeResource(ctx.resources, R.drawable.bg)
+                }
+                accent = pickAccent(bmp)
             }
-            accent = pickAccent(bmp)
         } catch (_: Exception) { }
         try {
             val h = api("/api/hist")
@@ -361,13 +463,23 @@ fun MagsApp() {
 
         // ============ 背景层（玻璃折射的内容） ============
         Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
-            // 樱花背景图（铺满，裁切）
-            Image(
-                painter = painterResource(R.drawable.bg),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
+            // 背景：用户选的壁纸优先，否则内置樱花图（都铺满 + 裁切）
+            val curWp = wp
+            if (curWp != null) {
+                Image(
+                    bitmap = curWp,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Image(
+                    painter = painterResource(R.drawable.bg),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
             // 顶/底压暗，保证白字和玻璃有对比
             Box(
                 Modifier.fillMaxSize().background(
@@ -601,6 +713,24 @@ fun MagsApp() {
                             maxLines = 1,
                             softWrap = false
                         )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    val gearIr = remember { MutableInteractionSource() }
+                    Box(
+                        Modifier.pressBounce(gearIr, 0.93f)
+                            .drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { RoundedCornerShape(13.dp) },
+                                effects = { glass(Glass(2.dp, 6.dp, 12.dp, chromatic = false)) }
+                            )
+                            .clip(RoundedCornerShape(13.dp))
+                            .clickable(interactionSource = gearIr, indication = null) {
+                                showSettings = true
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        BasicText("⚙", style = ts(12.5f, Color.White, FontWeight.SemiBold),
+                            maxLines = 1, softWrap = false)
                     }
                 }
             }
@@ -938,6 +1068,196 @@ fun MagsApp() {
                 PagBtn("下一页 →", page < pages) { runSearch(query, sort, page + 1) }
             }
         }
+
+        // ---- 外观设置（覆盖层） ----
+        if (showSettings) {
+            SettingsPane(
+                backdrop = backdrop,
+                look = look,
+                onChange = { l -> look = l; saveLook(ctx, l) },
+                hasWall = wp != null,
+                onPickWall = {
+                    try {
+                        picker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    } catch (_: Exception) { }
+                },
+                onResetWall = {
+                    try { wallFile(ctx).delete() } catch (_: Exception) { }
+                    wp = null
+                    scope.launch {
+                        try {
+                            val bmp = withContext(Dispatchers.IO) {
+                                BitmapFactory.decodeResource(ctx.resources, R.drawable.bg)
+                            }
+                            if (look.flowColor) accent = pickAccent(bmp)
+                        } catch (_: Exception) { }
+                    }
+                },
+                onClose = { showSettings = false }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsPane(
+    backdrop: LayerBackdrop,
+    look: Look,
+    onChange: (Look) -> Unit,
+    hasWall: Boolean,
+    onPickWall: () -> Unit,
+    onResetWall: () -> Unit,
+    onClose: () -> Unit
+) {
+    val scrimIr = remember { MutableInteractionSource() }
+    Box(
+        Modifier.fillMaxSize()
+            .background(Color(0xF2090C14))
+            .clickable(interactionSource = scrimIr, indication = null) { }   // 吞掉穿透点击
+    ) {
+        Column(
+            Modifier.fillMaxSize()
+                .padding(horizontal = 14.dp)
+                .padding(top = 46.dp, bottom = 20.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                BasicText("外观", style = ts(23f, Color.White, FontWeight.Bold))
+                Spacer(Modifier.weight(1f))
+                Box(
+                    Modifier
+                        .drawBackdrop(
+                            backdrop = backdrop,
+                            shape = { RoundedCornerShape(15.dp) },
+                            effects = { glass(Glass(3.dp, 8.dp, 16.dp, chromatic = false)) }
+                        )
+                        .clip(RoundedCornerShape(15.dp))
+                        .clickable { onClose() }
+                        .padding(horizontal = 18.dp, vertical = 9.dp)
+                ) {
+                    BasicText("完成", style = ts(13f, Color(0xFFBAE6FD), FontWeight.SemiBold))
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+
+            SectionTitle("液态玻璃")
+            SegRow(backdrop, "边缘折射", "玻璃边缘的弯折强度", listOf("关闭", "默认", "增强"), look.refr) { v ->
+                onChange(look.copy(refr = v))
+            }
+            SegRow(backdrop, "边缘色散", "玻璃边缘的彩虹色边", listOf("关闭", "开启"), if (look.chromatic) 1 else 0) { v ->
+                onChange(look.copy(chromatic = v == 1))
+            }
+            SegRow(backdrop, "深度效果", "玻璃芯部再加一层径向位移", listOf("关闭", "开启"), if (look.depth) 1 else 0) { v ->
+                onChange(look.copy(depth = v == 1))
+            }
+            SegRow(backdrop, "对比度", "对玻璃后面的内容做调整", listOf("较低", "默认", "较高"), look.contrast) { v ->
+                onChange(look.copy(contrast = v))
+            }
+            SegRow(backdrop, "饱和度", "同上，偏鲜艳或偏灰", listOf("较低", "默认", "较高"), look.saturation) { v ->
+                onChange(look.copy(saturation = v))
+            }
+
+            Spacer(Modifier.height(18.dp))
+            SectionTitle("壁纸与配色")
+            SegRow(backdrop, "跟随壁纸取色", "从壁纸里取强调色，按钮/标签跟着变", listOf("关闭", "开启"), if (look.flowColor) 1 else 0) { v ->
+                onChange(look.copy(flowColor = v == 1))
+            }
+            Spacer(Modifier.height(12.dp))
+            ActionRow(backdrop, if (hasWall) "换一张壁纸" else "从相册选一张壁纸", onPickWall)
+            if (hasWall) {
+                Spacer(Modifier.height(10.dp))
+                ActionRow(backdrop, "恢复内置壁纸", onResetWall, faint = true)
+            }
+            Spacer(Modifier.height(24.dp))
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                BasicText("设置保存在本机，不同设备互不影响",
+                    style = ts(11f, Color(0x66FFFFFF)))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(t: String) {
+    Box(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 8.dp)) {
+        BasicText(t, style = ts(12f, Color(0x99FFFFFF), FontWeight.SemiBold))
+    }
+}
+
+@Composable
+private fun SegRow(
+    backdrop: LayerBackdrop,
+    title: String,
+    hint: String,
+    options: List<String>,
+    index: Int,
+    onPick: (Int) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
+        BasicText(title, style = ts(14f, Color(0xFFE6F3FF), FontWeight.SemiBold))
+        Spacer(Modifier.height(2.dp))
+        BasicText(hint, style = ts(11f, Color(0x80FFFFFF)))
+        Spacer(Modifier.height(7.dp))
+        Row(
+            Modifier.fillMaxWidth()
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { RoundedCornerShape(19.dp) },
+                    effects = { glass(Glass(2.dp, 7.dp, 14.dp, chromatic = false)) }
+                )
+                .clip(RoundedCornerShape(19.dp))
+                .padding(4.dp)
+        ) {
+            options.forEachIndexed { i, label ->
+                val on = i == index
+                Box(
+                    Modifier.weight(1f)
+                        .clip(RoundedCornerShape(15.dp))
+                        .background(if (on) Color(0x33FFFFFF) else Color.Transparent)
+                        .clickable { onPick(i) }
+                        .padding(vertical = 9.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    BasicText(
+                        label,
+                        style = ts(12.5f, if (on) Color.White else Color(0x99FFFFFF),
+                            if (on) FontWeight.SemiBold else FontWeight.Normal),
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionRow(
+    backdrop: LayerBackdrop,
+    label: String,
+    onClick: () -> Unit,
+    faint: Boolean = false
+) {
+    Box(
+        Modifier.fillMaxWidth()
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { RoundedCornerShape(19.dp) },
+                effects = { glass(Glass(2.dp, 8.dp, 16.dp, chromatic = false)) }
+            )
+            .clip(RoundedCornerShape(19.dp))
+            .clickable { onClick() }
+            .padding(vertical = 14.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        BasicText(
+            label,
+            style = ts(13.5f, if (faint) Color(0x99FFFFFF) else Color(0xFFBAE6FD), FontWeight.SemiBold),
+            maxLines = 1,
+            softWrap = false
+        )
     }
 }
 
