@@ -758,6 +758,29 @@ fun MagsApp() {
                     var dragging by remember { mutableStateOf(false) }
                     var dragPos by remember { mutableFloatStateOf(idx.toFloat()) }
 
+                    // 果冻反馈：拖动时指示器被拉长、按拖动方向倾倒，整条也跟着微微倾斜。
+                    // （照 FlowMix 录屏拆帧量出来的：拉伸 1.2 → 6 倍、倾角 ±13°、条体 ±1.8°）
+                    var stretch by remember { mutableFloatStateOf(0f) }
+                    var tiltDeg by remember { mutableFloatStateOf(0f) }
+                    var barTilt by remember { mutableFloatStateOf(0f) }
+
+                    fun relax() {
+                        scope.launch {
+                            val s0 = stretch; val t0 = tiltDeg; val b0 = barTilt
+                            var t = 0f
+                            while (t < 1f) {
+                                delay(16)
+                                t = (t + 0.075f).coerceAtMost(1f)
+                                val e = 1f - t
+                                val wob = kotlin.math.sin(t * 10f) * e * 0.45f   // 轻微过冲
+                                stretch = s0 * (e + wob)
+                                tiltDeg = t0 * (e + wob)
+                                barTilt = b0 * (e * e)
+                            }
+                            stretch = 0f; tiltDeg = 0f; barTilt = 0f
+                        }
+                    }
+
                     fun commit(i: Int) {
                         val key = opts[i.coerceIn(0, opts.size - 1)].first
                         if (key != sort) {
@@ -770,6 +793,7 @@ fun MagsApp() {
                     // 容器
                     Box(
                         Modifier.fillMaxSize()
+                            .graphicsLayer { rotationZ = barTilt }
                             .drawBackdrop(
                                 backdrop = backdrop,
                                 shape = { RoundedCornerShape(23.dp) },
@@ -802,6 +826,13 @@ fun MagsApp() {
                                             // 普通 state 赋值：每帧只触发一次重组，不起协程
                                             dragPos = (startPos + totalDx / tabPx)
                                                 .coerceIn(0f, last)
+                                            // 果冻量：跟手速度越大，拉得越长、倒得越厉害
+                                            stretch = (stretch * 0.70f + dx * 1.25f)
+                                                .coerceIn(-tabPx * 0.85f, tabPx * 0.85f)
+                                            tiltDeg = (tiltDeg * 0.70f + dx * 0.11f)
+                                                .coerceIn(-13f, 13f)
+                                            barTilt = (barTilt * 0.80f + dx * 0.035f)
+                                                .coerceIn(-1.8f, 1.8f)
                                         }
                                     }
                                     if (!moved) {
@@ -816,6 +847,7 @@ fun MagsApp() {
                                             )
                                         }
                                         commit(target)
+                                        relax()
                                     } else {
                                         // 拖动松手：吸附到最近档位（限位）
                                         val target = dragPos.roundToInt()
@@ -829,6 +861,7 @@ fun MagsApp() {
                                             )
                                         }
                                         commit(target)
+                                        relax()
                                     }
                                 }
                             }
@@ -840,6 +873,12 @@ fun MagsApp() {
                             .offset(x = tabW * (if (dragging) dragPos else slide.value) + 4.dp)
                             .width(tabW - 8.dp)
                             .fillMaxHeight()
+                            .graphicsLayer {
+                                // 顺着拖动方向整体前甩 + 拉长，再按速度倒一点角度
+                                translationX = stretch * 0.5f
+                                scaleX = 1f + kotlin.math.abs(stretch) / (tabW.toPx().coerceAtLeast(1f) - 8f)
+                                rotationZ = tiltDeg
+                            }
                             .padding(vertical = 4.dp)
                             .clip(RoundedCornerShape(19.dp))
                             .drawBehind {
