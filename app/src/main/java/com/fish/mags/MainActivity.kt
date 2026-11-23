@@ -200,13 +200,9 @@ private fun loadWall(ctx: Context): android.graphics.Bitmap? {
 // 指示器形状：FlowMix 用的是 androidx.graphics.shapes 的 RoundedPolygon + Morph
 // （反编译里能看到它把 List<RoundedPolygon> 两两配成 Morph，再 toPath(progress)）。
 // 这里照做：常态一个胶囊，拉长态一个更宽的胶囊，用 stretch 当 morph 进度。
-// 原版是「圆角矩形」不是全圆头胶囊：圆角约为高度的 32%（全圆头是 50%）
-private val PillNormal by lazy {
-    RoundedPolygon.rectangle(width = 1.0f, height = 0.62f, rounding = CornerRounding(0.20f))
-}
-private val PillWide by lazy {
-    RoundedPolygon.rectangle(width = 1.28f, height = 0.62f, rounding = CornerRounding(0.20f))
-}
+// 胶囊：两端连续圆弧（圆角 = 高度一半），不是圆角矩形
+private val PillNormal by lazy { RoundedPolygon.pill(width = 1.0f, height = 0.62f) }
+private val PillWide by lazy { RoundedPolygon.pill(width = 1.28f, height = 0.62f) }
 private val PillMorph by lazy { Morph(PillNormal, PillWide) }
 
 // 边缘高光：玻璃在花壁纸上要靠这一圈亮边才「立」得起来（FlowMix 的卡片也是这个感觉）
@@ -939,10 +935,10 @@ fun MagsApp() {
                         // ── 四项共用同一套宽度/高度/圆角，且胶囊与文字同一个中心 ──
                         // 贴边不靠外推、也不靠单独放大：把「共用宽度」调到槽宽减 10dp，
                         // 首尾自然就只剩同样宽的小缝（对称），中心始终压在文字中心上。
-                        // 照原版：胶囊比一档略宽、几乎顶满栏高，外端贴着栏内缘
-                        val wPx = ((slotW - 2.dp.toPx()) * (1f + stretch))
-                            .coerceAtMost(slotW - 1.dp.toPx())
-                        val hPx = size.height * 0.82f
+                        // 四项共用：槽宽 82%、栏高 80%，两端连续圆弧
+                        val wPx = (slotW * 0.82f * (1f + stretch))
+                            .coerceAtMost(slotW - 4.dp.toPx())
+                        val hPx = size.height * 0.80f
                         // 中心 = 槽位中心 = 文字中心（不再做任何外移）
                         val cx = (slotW * (posF + 0.5f)).coerceIn(wPx / 2f, size.width - wPx / 2f)
 
@@ -956,14 +952,8 @@ fun MagsApp() {
 
                         // 内底：透亮玻璃窗 —— 原版选中块比栏内更亮更清，
                         // 所以这里抬亮而不是压暗；移动时让位给主题色环带。
-                        // 玻璃窗：中央抬亮 + 一圈内缘厚度光，才和栏内拉开层次
-                        drawPath(cp, Color.White.copy(alpha = 0.15f * (1f - 0.45f * bandOn)))
-                        drawPath(cp, accent.copy(alpha = 0.06f * (1f - 0.6f * bandOn)))
-                        drawPath(
-                            cp,
-                            Color.White.copy(alpha = 0.10f * (1f - 0.5f * bandOn)),
-                            style = Stroke(3.2.dp.toPx())
-                        )
+                        // 偏黑透底：中心比周围暗，但底图仍透得出来；移动时让位给色带
+                        drawPath(cp, Color.Black.copy(alpha = 0.26f * (1f - 0.70f * bandOn)))
 
                         // 移动时：同一轮廓外侧加一圈主题色带（accent 随壁纸走，不写死金黄）
                         // 色带贴在玻璃边本身：内缘清楚（1.3dp 同宽），外缘只留一点内羽化，
@@ -985,16 +975,17 @@ fun MagsApp() {
                         drawPath(
                             cp,
                             brush = Brush.linearGradient(
+                                // 只有局部折射高光：左上亮，其余迅速衰减到暗，不成一整圈白框
                                 colorStops = arrayOf(
-                                    0.00f to Color.White.copy(alpha = 0.60f),
-                                    0.40f to Color.White.copy(alpha = 0.26f),
-                                    0.72f to Color.White.copy(alpha = 0.14f),
-                                    1.00f to Color.White.copy(alpha = 0.08f)
+                                    0.00f to Color.White.copy(alpha = 0.52f),
+                                    0.38f to Color.White.copy(alpha = 0.10f),
+                                    0.66f to Color.White.copy(alpha = 0.02f),
+                                    1.00f to Color.Black.copy(alpha = 0.10f)
                                 ),
                                 start = Offset(cx - wPx * 0.5f, cy - hPx * 0.55f),
                                 end = Offset(cx + wPx * 0.5f, cy + hPx * 0.55f)
                             ),
-                            style = Stroke(1.1.dp.toPx())
+                            style = Stroke(1.0.dp.toPx())
                         )
                     }
 
