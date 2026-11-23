@@ -874,6 +874,7 @@ fun MagsApp() {
                             // 一个手势区同时处理：原地松手=点击，拖动=跟手
                             .pointerInput(tabPx) {
                                 awaitEachGesture {
+                                  try {
                                     val down = awaitFirstDown(requireUnconsumed = false)
                                     val startX = down.position.x
                                     var totalDx = 0f
@@ -947,6 +948,10 @@ fun MagsApp() {
                                         stretch = 0f
                                     }
                                     commit(target)      // 真正改排序只在这里发生一次
+                                  } finally {
+                                    // 手势被重组打断时也要收尾，否则 dragging 会卡住、色带一直挂着
+                                    dragging = false
+                                  }
                                 }
                             }
                     ) {
