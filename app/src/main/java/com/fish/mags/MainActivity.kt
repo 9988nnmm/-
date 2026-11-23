@@ -161,10 +161,11 @@ data class Look(
 
 // 供 SegRow 这类没有 accent 参数的组合函数读取。
 // 必须是 Compose 状态：普通 var 改了不会触发重组，设置页会一直用首次组合时的颜色。
-var ACCENT by androidx.compose.runtime.mutableStateOf(Color(0xFF4285F4))
+var ACCENT by androidx.compose.runtime.mutableStateOf(Color(0xFFD0BCFF))
 
-// 关掉「跟随壁纸取色」时用的默认系统色（Material / Android 原生的 Google 蓝）
-val DEFAULT_ACCENT = Color(0xFF4285F4)
+// 关掉「跟随壁纸取色」时用的默认系统色。
+// 用 Material 3 基线（官方暗色主题的 primary，Android 12+ 动态取色不可用时的兜底）。
+val DEFAULT_ACCENT = Color(0xFFD0BCFF)
 
 fun loadLook(ctx: Context): Look {
     val sp = ctx.getSharedPreferences("mags", Context.MODE_PRIVATE)
@@ -1482,7 +1483,9 @@ private fun SegRow(
                                 label,
                                 style = ts(
                                     12.5f,
-                                    if (on) Color.White else Color(0xB3FFFFFF),
+                                    if (on) {
+                                        if (ACCENT.luminance() > 0.6f) Color(0xFF1C1B1F) else Color.White
+                                    } else Color(0xB3FFFFFF),
                                     if (on) FontWeight.Bold else FontWeight.Medium
                                 ),
                                 maxLines = 1, softWrap = false
