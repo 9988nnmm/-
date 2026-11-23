@@ -141,7 +141,7 @@ data class Glass(
 fun BackdropEffectScope.glass(g: Glass) {
     val l = LOOK
     colorControls(brightness = 0f, contrast = l.con, saturation = l.sat)
-    blur(g.blur.toPx())
+    blur(g.blur.toPx() * l.blurK)
     val k = l.scale
     if (k <= 0f) return
     lens(g.height.toPx() * k, g.amount.toPx() * k,
@@ -156,7 +156,8 @@ data class Look(
     val contrast: Int = 1,          // 0 较低 / 1 默认 / 2 较高
     val saturation: Int = 1,
     val flowColor: Boolean = true,  // 跟随壁纸取强调色
-    val dim: Int = 1                // 背景压暗：0 轻 / 1 中 / 2 重
+    val dim: Int = 1,               // 背景压暗：0 轻 / 1 中 / 2 重
+    val blur: Int = 1               // 玻璃模糊程度：0 通透 / 1 默认 / 2 朦胧
 ) {
     // 压暗系数：原来背景上是四层叠加（85% 黑 + 40% 黑 + 靛蓝紫），壁纸被压成藏青，
     // 玻璃后面等于一片黑，透出来当然没有颜色。这里收成一层，强度可调。
@@ -164,6 +165,9 @@ data class Look(
     val scale: Float get() = when (refr) { 0 -> 0f; 1 -> 1f; else -> 1.75f }
     val con: Float get() = when (contrast) { 0 -> 0.93f; 1 -> 1.03f; else -> 1.16f }
     val sat: Float get() = when (saturation) { 0 -> 1.15f; 1 -> 1.5f; else -> 1.95f }
+    // 模糊强度的倍率：通透 0.45 / 默认 1.0 / 朦胧 2.1
+    // 所有 glass(...) 里的 blur 都乘这个系数，改一档整机玻璃一起变
+    val blurK: Float get() = when (blur) { 0 -> 0.45f; 1 -> 1.0f; else -> 2.1f }
 }
 
 // 绘制线程要读，用 @Volatile 而不进 Compose 状态；界面侧改了 look 会触发重组再同步过来
@@ -185,7 +189,8 @@ fun loadLook(ctx: Context): Look {
         contrast = sp.getInt("lk_con", 1),
         saturation = sp.getInt("lk_sat", 1),
         flowColor = sp.getBoolean("lk_flow", true),
-        dim = sp.getInt("lk_dim", 1)
+        dim = sp.getInt("lk_dim", 1),
+        blur = sp.getInt("lk_blur", 1)
     )
 }
 
@@ -198,6 +203,7 @@ fun saveLook(ctx: Context, l: Look) {
         .putInt("lk_sat", l.saturation)
         .putBoolean("lk_flow", l.flowColor)
         .putInt("lk_dim", l.dim)
+        .putInt("lk_blur", l.blur)
         .apply()
 }
 
@@ -1417,6 +1423,10 @@ private fun SettingsPane(
             Spacer(Modifier.height(18.dp))
 
             SectionTitle("液态玻璃")
+            // 放在最上面：这是最直观的一项，改完立刻能看出玻璃通透还是朦胧
+            SegRow(backdrop, "玻璃模糊程度", "调整玻璃效果的模糊强度", listOf("通透", "默认", "朦胧"), look.blur) { v ->
+                onChange(look.copy(blur = v))
+            }
             SegRow(backdrop, "边缘折射", "玻璃边缘的弯折强度", listOf("关闭", "默认", "增强"), look.refr) { v ->
                 onChange(look.copy(refr = v))
             }
