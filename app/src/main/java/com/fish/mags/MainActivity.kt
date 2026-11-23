@@ -971,21 +971,25 @@ fun MagsApp() {
                             )
                         }
 
-                        // 静止/始终在的一道折射软边：左上亮 → 右下暗，单一描边
-                        drawPath(
-                            cp,
-                            brush = Brush.linearGradient(
-                                // 只有局部折射高光：左上亮，其余迅速衰减到暗，不成一整圈白框
-                                colorStops = arrayOf(
-                                    0.00f to Color.White.copy(alpha = 0.55f),
-                                    0.30f to Color.White.copy(alpha = 0.06f),
-                                    0.55f to Color.Transparent,
-                                    1.00f to Color.Black.copy(alpha = 0.05f)
-                                ),
-                                start = Offset(cx - wPx * 0.5f, cy - hPx * 0.55f),
-                                end = Offset(cx + wPx * 0.5f, cy + hPx * 0.55f)
-                            ),
-                            style = Stroke(1.0.dp.toPx())
+                        // 只画左上约 100° 的一段折射弧 —— 明确不是一整圈描边
+                        drawArc(
+                            color = Color.White.copy(alpha = 0.55f),
+                            startAngle = 168f,
+                            sweepAngle = 96f,
+                            useCenter = false,
+                            topLeft = Offset(cx - wPx / 2f, cy - hPx / 2f),
+                            size = androidx.compose.ui.geometry.Size(wPx, hPx),
+                            style = Stroke(1.4.dp.toPx())
+                        )
+                        // 右下角一点点暗边，交代厚度（极淡）
+                        drawArc(
+                            color = Color.Black.copy(alpha = 0.12f),
+                            startAngle = 348f,
+                            sweepAngle = 80f,
+                            useCenter = false,
+                            topLeft = Offset(cx - wPx / 2f, cy - hPx / 2f),
+                            size = androidx.compose.ui.geometry.Size(wPx, hPx),
+                            style = Stroke(1.2.dp.toPx())
                         )
                     }
 
