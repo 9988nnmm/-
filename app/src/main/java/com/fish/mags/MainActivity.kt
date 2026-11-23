@@ -59,9 +59,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
 import androidx.graphics.shapes.Morph
 import androidx.graphics.shapes.RoundedPolygon
-import androidx.graphics.shapes.CornerRounding
 import androidx.graphics.shapes.pill
-import androidx.graphics.shapes.rectangle
 import androidx.graphics.shapes.toPath
 import androidx.palette.graphics.Palette
 import androidx.compose.ui.layout.ContentScale
@@ -932,10 +930,7 @@ fun MagsApp() {
                         val cy = size.height / 2f
                         val posF = if (dragging) dragPos else ind.value
 
-                        // ── 四项共用同一套宽度/高度/圆角，且胶囊与文字同一个中心 ──
-                        // 贴边不靠外推、也不靠单独放大：把「共用宽度」调到槽宽减 10dp，
-                        // 首尾自然就只剩同样宽的小缝（对称），中心始终压在文字中心上。
-                        // 四项共用：槽宽 82%、栏高 80%，两端连续圆弧
+                        // 四项共用：槽宽 82%、栏高 80%，两端连续圆弧，中心 = 文字中心
                         val wPx = (slotW * 0.82f * (1f + stretch))
                             .coerceAtMost(slotW - 4.dp.toPx())
                         val hPx = size.height * 0.80f
@@ -950,9 +945,7 @@ fun MagsApp() {
                         ap.transform(mtx)
                         val cp = ap.asComposePath()
 
-                        // 内底：透亮玻璃窗 —— 原版选中块比栏内更亮更清，
-                        // 所以这里抬亮而不是压暗；移动时让位给主题色环带。
-                        // 偏黑透底：中心比周围暗，但底图仍透得出来；移动时让位给色带
+                        // 偏黑透底：中心比周围暗，底图仍透得出来；移动时让位给色带
                         drawPath(cp, Color.Black.copy(alpha = 0.26f * (1f - 0.70f * bandOn)))
 
                         // 移动时：同一轮廓外侧加一圈主题色带（accent 随壁纸走，不写死金黄）
@@ -971,26 +964,6 @@ fun MagsApp() {
                             )
                         }
 
-                        // 沿路径本身的局部折射高光：用 sweep 渐变只点亮左上那一段，
-                        // 轮廓严格跟着胶囊走（不再用椭圆弧，避免悬空/离边）
-                        drawPath(
-                            cp,
-                            brush = Brush.sweepGradient(
-                                colorStops = arrayOf(
-                                    0.00f to Color.Transparent,
-                                    0.06f to Color.Black.copy(alpha = 0.10f),   // 右下一点暗边
-                                    0.16f to Color.Transparent,
-                                    0.50f to Color.Transparent,
-                                    0.54f to Color.White.copy(alpha = 0.45f),
-                                    0.60f to Color.White.copy(alpha = 0.80f),
-                                    0.68f to Color.White.copy(alpha = 0.45f),
-                                    0.76f to Color.Transparent,
-                                    1.00f to Color.Transparent
-                                ),
-                                center = Offset(cx, cy)
-                            ),
-                            style = Stroke(1.6.dp.toPx())
-                        )
                     }
 
                     // 文字层（不拦截手势）
