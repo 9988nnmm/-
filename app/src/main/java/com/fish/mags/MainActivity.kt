@@ -159,6 +159,9 @@ data class Look(
 // 绘制线程要读，用 @Volatile 而不进 Compose 状态；界面侧改了 look 会触发重组再同步过来
 @Volatile var LOOK = Look()
 
+// 供 SegRow 这类没有 accent 参数的组合函数读取（由 SideEffect 同步）
+@Volatile var ACCENT: Color = Color(0xFF7EA6F5)
+
 fun loadLook(ctx: Context): Look {
     val sp = ctx.getSharedPreferences("mags", Context.MODE_PRIVATE)
     return Look(
@@ -408,6 +411,7 @@ fun MagsApp() {
     var favBusy by remember { mutableStateOf(false) }
     var favMsg by remember { mutableStateOf("") }
     var accent by remember { mutableStateOf(Color(0xFFF2F4F7)) }   // 跟随壁纸的强调色
+    SideEffect { ACCENT = accent }
     var hist by remember { mutableStateOf(listOf<String>()) }
 
     // 外观设置（客户端本地持久化）
@@ -1229,7 +1233,7 @@ fun MagsApp() {
         // ---- 外观设置（覆盖层） ----
         if (showSettings) {
             SettingsPane(
-                backdrop = fgBackdrop,
+                backdrop = backdrop,
                 look = look,
                 onChange = { l -> look = l; saveLook(ctx, l) },
                 hasWall = wp != null,
@@ -1271,20 +1275,29 @@ private fun SettingsPane(
     val scrimIr = remember { MutableInteractionSource() }
     Box(
         Modifier.fillMaxSize()
-            // 磨砂：把下层内容模糊掉再压半透明底，既能透出壁纸颜色，又不会和设置项文字打架
+            // 只透壁纸（backdrop = 背景层），不再采样列表内容，避免和设置项文字叠在一起
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { RoundedCornerShape(0.dp) },
-                effects = { blur(26.dp.toPx()) }
+                effects = { blur(18.dp.toPx()) }
             )
-            .background(Color(0x8C0B0E18))
+            .background(Color(0x730A0D16))
             .clickable(interactionSource = scrimIr, indication = null) { }   // 吞掉穿透点击
     ) {
         Column(
             Modifier.fillMaxSize()
-                .padding(horizontal = 14.dp)
-                .padding(top = 46.dp, bottom = 20.dp)
+                .padding(horizontal = 10.dp)
+                .padding(top = 42.dp, bottom = 14.dp)
+                // 一整个大玻璃面板
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { RoundedCornerShape(30.dp) },
+                    effects = { glass(Glass(6.dp, 10.dp, 18.dp)) },
+                    highlight = GlassHi
+                )
+                .clip(RoundedCornerShape(30.dp))
                 .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 BasicText("外观", style = ts(23f, Color.White, FontWeight.Bold))
@@ -1366,86 +1379,53 @@ private fun SegRow(
         Spacer(Modifier.height(2.dp))
         BasicText(hint, style = ts(11f, Color(0x80FFFFFF)))
         Spacer(Modifier.height(7.dp))
-        Row(
-            Modifier.fillMaxWidth()
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { RoundedCornerShape(19.dp) },
-                    effects = { glass(Glass(2.dp, 7.dp, 14.dp, chromatic = false)) }
-                )
-                .clip(RoundedCornerShape(19.dp))
-                .padding(4.dp)
-        ) {
-            options.forEachIndexed { i, label ->
-                val on = i == index
+
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val n = options.size
+            val segW = maxWidth / n
+            // 和排序条同一套手感：位置用 spring，选中块滑动过去
+            val pos by animateFloatAsState(
+                targetValue = index.toFloat(),
+                animationSpec = spring(dampingRatio = 0.72f, stiffness = 420f),
+                label = "segPos"
+            )
+            Box(
+                Modifier.fillMaxWidth()
+                    .height(42.dp)
+                    // 暗槽：左右镂空，看得出是"挖进去"的一条
+                    .clip(RoundedCornerShape(21.dp))
+                    .background(Color(0x590B0E16))
+            ) {
                 Box(
-                    Modifier.weight(1f)
-                        .clip(RoundedCornerShape(15.dp))
-                        .background(if (on) Color(0x33FFFFFF) else Color.Transparent)
-                        .clickable { onPick(i) }
-                        .padding(vertical = 9.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    BasicText(
-                        label,
-                        style = ts(12.5f, if (on) Color.White else Color(0x99FFFFFF),
-                            if (on) FontWeight.SemiBold else FontWeight.Normal),
-                        maxLines = 1,
-                        softWrap = false
-                    )
+                    Modifier
+                        .offset(x = segW * pos)
+                        .width(segW)
+                        .fillMaxHeight()
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(17.dp))
+                        .background(ACCENT.copy(alpha = 0.92f))
+                )
+                Row(Modifier.fillMaxSize()) {
+                    options.forEachIndexed { i, label ->
+                        val on = i == index
+                        Box(
+                            Modifier.weight(1f).fillMaxHeight().clickable { onPick(i) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            BasicText(
+                                label,
+                                style = ts(
+                                    12.5f,
+                                    if (on) Color(0xFF0B1020) else Color(0xB3FFFFFF),
+                                    if (on) FontWeight.Bold else FontWeight.Medium
+                                ),
+                                maxLines = 1, softWrap = false
+                            )
+                        }
+                    }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ActionRow(
-    backdrop: LayerBackdrop,
-    label: String,
-    onClick: () -> Unit,
-    faint: Boolean = false
-) {
-    Box(
-        Modifier.fillMaxWidth()
-            .drawBackdrop(
-                backdrop = backdrop,
-                shape = { RoundedCornerShape(19.dp) },
-                effects = { glass(Glass(2.dp, 8.dp, 16.dp, chromatic = false)) }
-            )
-            .clip(RoundedCornerShape(19.dp))
-            .clickable { onClick() }
-            .padding(vertical = 14.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        BasicText(
-            label,
-            style = ts(13.5f, if (faint) Color(0x99FFFFFF) else Color(0xFFBAE6FD), FontWeight.SemiBold),
-            maxLines = 1,
-            softWrap = false
-        )
-    }
-}
-
-@Composable
-private fun PillText(txt: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier.clip(RoundedCornerShape(11.dp))
-            .background(Color(0x33FFFFFF))
-            .padding(horizontal = 10.dp, vertical = 4.dp)
-    ) {
-        BasicText(
-            txt, style = ts(11.5f, Color(0xDDE0F2FE)),
-            maxLines = 1, softWrap = false,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-private fun CenterHint(txt: String) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        BasicText(txt, style = ts(13.5f, Color(0x99FFFFFF)))
     }
 }
 
