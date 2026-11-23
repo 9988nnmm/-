@@ -977,10 +977,10 @@ fun MagsApp() {
                             brush = Brush.linearGradient(
                                 // 只有局部折射高光：左上亮，其余迅速衰减到暗，不成一整圈白框
                                 colorStops = arrayOf(
-                                    0.00f to Color.White.copy(alpha = 0.52f),
-                                    0.38f to Color.White.copy(alpha = 0.10f),
-                                    0.66f to Color.White.copy(alpha = 0.02f),
-                                    1.00f to Color.Black.copy(alpha = 0.10f)
+                                    0.00f to Color.White.copy(alpha = 0.55f),
+                                    0.30f to Color.White.copy(alpha = 0.06f),
+                                    0.55f to Color.Transparent,
+                                    1.00f to Color.Black.copy(alpha = 0.05f)
                                 ),
                                 start = Offset(cx - wPx * 0.5f, cy - hPx * 0.55f),
                                 end = Offset(cx + wPx * 0.5f, cy + hPx * 0.55f)
