@@ -163,9 +163,14 @@ data class Look(
 // 必须是 Compose 状态：普通 var 改了不会触发重组，设置页会一直用首次组合时的颜色。
 var ACCENT by androidx.compose.runtime.mutableStateOf(Color(0xFFD0BCFF))
 
-// 关掉「跟随壁纸取色」时用的默认系统色。
-// 用 Material 3 基线（官方暗色主题的 primary，Android 12+ 动态取色不可用时的兜底）。
-val DEFAULT_ACCENT = Color(0xFFD0BCFF)
+// 关掉「跟随壁纸取色」时用的默认系统色（Material 3 基线 · 暗色主题）
+val DEFAULT_ACCENT = Color(0xFFD0BCFF)          // primary
+val DEFAULT_PILL_BG = Color(0xFF4A4458)         // secondaryContainer
+val DEFAULT_PILL_FG = Color(0xFFE8DEF8)         // onSecondaryContainer
+
+// 选中块用 M3 的 secondaryContainer / onSecondaryContainer（EhViewer 那条玫红就是它）
+var PILL_BG by androidx.compose.runtime.mutableStateOf(DEFAULT_PILL_BG)
+var PILL_FG by androidx.compose.runtime.mutableStateOf(DEFAULT_PILL_FG)
 
 fun loadLook(ctx: Context): Look {
     val sp = ctx.getSharedPreferences("mags", Context.MODE_PRIVATE)
@@ -327,6 +332,32 @@ suspend fun doSearch(
  * 即两端基本一致，所以不要再自作主张去压饱和度。
  * 只有主导色过暗时（深色壁纸）才提亮到 tone 80，避免得到一团黑。
  */
+/** 用 MCU 从壁纸算出一整套 M3 角色色：primary / secondaryContainer / onSecondaryContainer */
+private fun pickScheme(bitmap: android.graphics.Bitmap?): Triple<Color, Color, Color> {
+    if (bitmap == null) return Triple(Color(DEFAULT_ACCENT), Color(DEFAULT_PILL_BG), Color(DEFAULT_PILL_FG))
+    return try {
+        val n = 96
+        val small = android.graphics.Bitmap.createScaledBitmap(bitmap, n, n, true)
+        val px = IntArray(n * n)
+        small.getPixels(px, 0, n, 0, 0, n, n)
+        for (i in px.indices) px[i] = px[i] or 0xFF000000.toInt()
+        val q = com.google.android.material.color.utilities.QuantizerCelebi.quantize(px, 128)
+        val seed = com.google.android.material.color.utilities.Score.score(q).firstOrNull()
+            ?: return Triple(Color(DEFAULT_ACCENT), Color(DEFAULT_PILL_BG), Color(DEFAULT_PILL_FG))
+        val hct = com.google.android.material.color.utilities.Hct.fromInt(seed)
+        // 暗色方案：primary 是 tone 80 的浅色，secondaryContainer 是 tone 30 的深色
+        val scheme = com.google.android.material.color.utilities.SchemeTonalSpot(hct, true, 0.0)
+        val mdc = com.google.android.material.color.utilities.MaterialDynamicColors()
+        Triple(
+            Color(mdc.primary().getArgb(scheme)),
+            Color(mdc.secondaryContainer().getArgb(scheme)),
+            Color(mdc.onSecondaryContainer().getArgb(scheme))
+        )
+    } catch (_: Throwable) {
+        Triple(Color(DEFAULT_ACCENT), Color(DEFAULT_PILL_BG), Color(DEFAULT_PILL_FG))
+    }
+}
+
 private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
     val fallback = 0xFFD0A199.toInt()
     if (bitmap == null) return Color(fallback)
@@ -445,7 +476,12 @@ fun MagsApp() {
                 }
                 if (bmp != null) {
                     wp = bmp.asImageBitmap()
-                    accent = if (look.flowColor) pickAccent(bmp) else DEFAULT_ACCENT
+                    if (look.flowColor) {
+                        val (ac, bg, fg) = pickScheme(bmp)
+                        accent = ac; PILL_BG = bg; PILL_FG = fg
+                    } else {
+                        accent = DEFAULT_ACCENT; PILL_BG = DEFAULT_PILL_BG; PILL_FG = DEFAULT_PILL_FG
+                    }
                 }
             } catch (_: Exception) { }
         }
@@ -516,12 +552,20 @@ fun MagsApp() {
             val wb = withContext(Dispatchers.IO) { loadWall(ctx) }
             if (wb != null) {
                 wp = wb.asImageBitmap()
-                accent = if (loadLook(ctx).flowColor) pickAccent(wb) else DEFAULT_ACCENT
+                if (loadLook(ctx).flowColor) {
+                    val (ac, bg, fg) = pickScheme(wb); accent = ac; PILL_BG = bg; PILL_FG = fg
+                } else {
+                    accent = DEFAULT_ACCENT; PILL_BG = DEFAULT_PILL_BG; PILL_FG = DEFAULT_PILL_FG
+                }
             } else {
                 val bmp = withContext(Dispatchers.IO) {
                     BitmapFactory.decodeResource(ctx.resources, R.drawable.bg)
                 }
-                accent = if (loadLook(ctx).flowColor) pickAccent(bmp) else DEFAULT_ACCENT
+                if (loadLook(ctx).flowColor) {
+                    val (ac, bg, fg) = pickScheme(bmp); accent = ac; PILL_BG = bg; PILL_FG = fg
+                } else {
+                    accent = DEFAULT_ACCENT; PILL_BG = DEFAULT_PILL_BG; PILL_FG = DEFAULT_PILL_FG
+                }
             }
         } catch (_: Exception) { }
         try {
@@ -1244,11 +1288,13 @@ fun MagsApp() {
                     look = l; saveLook(ctx, l)
                     // 开关「跟随壁纸取色」要立刻生效：关掉回默认系统色，打开重新取一次
                     scope.launch {
-                        accent = if (l.flowColor) {
-                            withContext(Dispatchers.IO) {
-                                loadWall(ctx)?.let { pickAccent(it) }
-                            } ?: DEFAULT_ACCENT
-                        } else DEFAULT_ACCENT
+                        if (l.flowColor) {
+                            val w = withContext(Dispatchers.IO) { loadWall(ctx) }
+                            val (ac, bg, fg) = pickScheme(w)
+                            accent = ac; PILL_BG = bg; PILL_FG = fg
+                        } else {
+                            accent = DEFAULT_ACCENT; PILL_BG = DEFAULT_PILL_BG; PILL_FG = DEFAULT_PILL_FG
+                        }
                     }
                 },
                 hasWall = wp != null,
@@ -1267,7 +1313,11 @@ fun MagsApp() {
                             val bmp = withContext(Dispatchers.IO) {
                                 BitmapFactory.decodeResource(ctx.resources, R.drawable.bg)
                             }
-                            accent = if (look.flowColor) pickAccent(bmp) else DEFAULT_ACCENT
+                            if (look.flowColor) {
+                                val (ac, bg, fg) = pickScheme(bmp); accent = ac; PILL_BG = bg; PILL_FG = fg
+                            } else {
+                                accent = DEFAULT_ACCENT; PILL_BG = DEFAULT_PILL_BG; PILL_FG = DEFAULT_PILL_FG
+                            }
                         } catch (_: Exception) { }
                     }
                 },
@@ -1468,7 +1518,7 @@ private fun SegRow(
                         .fillMaxHeight()
                         .padding(4.dp)
                         .clip(RoundedCornerShape(17.dp))
-                        .background(ACCENT)
+                        .background(PILL_BG)
                 )
                 Row(Modifier.fillMaxSize()) {
                     options.forEachIndexed { i, label ->
@@ -1483,9 +1533,7 @@ private fun SegRow(
                                 label,
                                 style = ts(
                                     12.5f,
-                                    if (on) {
-                                        if (ACCENT.luminance() > 0.45f) Color(0xFF1C1B1F) else Color.White
-                                    } else Color(0xB3FFFFFF),
+                                    if (on) PILL_FG else Color(0xB3FFFFFF),
                                     if (on) FontWeight.Bold else FontWeight.Medium
                                 ),
                                 maxLines = 1, softWrap = false
