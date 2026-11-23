@@ -971,25 +971,25 @@ fun MagsApp() {
                             )
                         }
 
-                        // 只画左上约 100° 的一段折射弧 —— 明确不是一整圈描边
-                        drawArc(
-                            color = Color.White.copy(alpha = 0.55f),
-                            startAngle = 168f,
-                            sweepAngle = 96f,
-                            useCenter = false,
-                            topLeft = Offset(cx - wPx / 2f, cy - hPx / 2f),
-                            size = androidx.compose.ui.geometry.Size(wPx, hPx),
-                            style = Stroke(1.4.dp.toPx())
-                        )
-                        // 右下角一点点暗边，交代厚度（极淡）
-                        drawArc(
-                            color = Color.Black.copy(alpha = 0.12f),
-                            startAngle = 348f,
-                            sweepAngle = 80f,
-                            useCenter = false,
-                            topLeft = Offset(cx - wPx / 2f, cy - hPx / 2f),
-                            size = androidx.compose.ui.geometry.Size(wPx, hPx),
-                            style = Stroke(1.2.dp.toPx())
+                        // 沿路径本身的局部折射高光：用 sweep 渐变只点亮左上那一段，
+                        // 轮廓严格跟着胶囊走（不再用椭圆弧，避免悬空/离边）
+                        drawPath(
+                            cp,
+                            brush = Brush.sweepGradient(
+                                colorStops = arrayOf(
+                                    0.00f to Color.Transparent,
+                                    0.06f to Color.Black.copy(alpha = 0.10f),   // 右下一点暗边
+                                    0.16f to Color.Transparent,
+                                    0.50f to Color.Transparent,
+                                    0.56f to Color.White.copy(alpha = 0.30f),
+                                    0.63f to Color.White.copy(alpha = 0.55f),
+                                    0.70f to Color.White.copy(alpha = 0.22f),
+                                    0.76f to Color.Transparent,
+                                    1.00f to Color.Transparent
+                                ),
+                                center = Offset(cx, cy)
+                            ),
+                            style = Stroke(1.3.dp.toPx())
                         )
                     }
 
