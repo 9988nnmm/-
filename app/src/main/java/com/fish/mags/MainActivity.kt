@@ -1484,7 +1484,7 @@ private fun SegRow(
                                 style = ts(
                                     12.5f,
                                     if (on) {
-                                        if (ACCENT.luminance() > 0.6f) Color(0xFF1C1B1F) else Color.White
+                                        if (ACCENT.luminance() > 0.45f) Color(0xFF1C1B1F) else Color.White
                                     } else Color(0xB3FFFFFF),
                                     if (on) FontWeight.Bold else FontWeight.Medium
                                 ),
