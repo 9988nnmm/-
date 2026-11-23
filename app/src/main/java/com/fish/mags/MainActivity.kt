@@ -310,39 +310,46 @@ suspend fun doSearch(
  * 免得在一张暗色壁纸上发光发不出来。
  */
 private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
-    val fallback = 0xFFE2A18F.toInt()          // 兜底用柔和暖调，不再用纯黄
+    val fallback = 0xFFF2F4F7.toInt()
     if (bitmap == null) return Color(fallback)
 
-    // 缩到 48×48 采样后按色相投票：面积 × 饱和度 × 明度。
-    // 这样不会被一小块高饱和杂色（比如壁纸边角的一点蓝）带偏 —— Palette.vibrant 就是这个问题。
     val n = 48
     val small = android.graphics.Bitmap.createScaledBitmap(bitmap, n, n, true)
     val px = IntArray(n * n)
     small.getPixels(px, 0, n, 0, 0, n, n)
 
-    val bins = FloatArray(36); val satSum = FloatArray(36); val valSum = FloatArray(36)
+    val bins = FloatArray(36); val satSum = FloatArray(36)
+    var vSum = 0f; var cnt = 0
     val hsv = FloatArray(3)
     for (c in px) {
         if (android.graphics.Color.alpha(c) < 200) continue
         android.graphics.Color.colorToHSV(c, hsv)
-        if (hsv[2] < 0.12f || hsv[1] < 0.10f) continue     // 太暗/太灰的不参与
+        vSum += hsv[2]; cnt++
+        if (hsv[2] < 0.10f || hsv[1] < 0.06f) continue
         val b = (hsv[0] / 10f).toInt().coerceIn(0, 35)
         val w = hsv[1] * hsv[2]
-        bins[b] += w; satSum[b] += hsv[1] * w; valSum[b] += hsv[2] * w
+        bins[b] += w; satSum[b] += hsv[1] * w
     }
     var best = -1; var bestW = 0f
     for (i in 0 until 36) {
-        // 相邻桶合并，避免色相边界把同一片颜色劈成两半
         val w = bins[i] + bins[(i + 35) % 36] * 0.5f + bins[(i + 1) % 36] * 0.5f
         if (w > bestW) { bestW = w; best = i }
     }
+    val meanV = if (cnt > 0) vSum / cnt else 0.4f
     if (best < 0 || bins[best] <= 0f) return Color(fallback)
 
-    val s0 = satSum[best] / bins[best]
-    val v0 = valSum[best] / bins[best]
+    val sDom = satSum[best] / bins[best]
+
+    // ── 关键：不是「取一个鲜艳色」，而是取一个「很亮的淡色调」 ──
+    // 对照 FlowMix 两张截图反推：
+    //   暖色壁纸 → 淡鲑粉（V≈0.96, S≈0.20）
+    //   暗色壁纸 → 近白微冷（V≈0.97, S≈0.03）
+    // 也就是 S 压到很低、V 拉到接近白，只保留壁纸的色相倾向。
+    var sOut = sDom * 0.50f
+    if (meanV < 0.35f) sOut *= 0.35f      // 壁纸本身暗 → 更接近纯白
     hsv[0] = best * 10f + 5f
-    hsv[1] = s0.coerceIn(0.30f, 0.55f)     // 柔和但有存在感，接近 FlowMix 的调子
-    hsv[2] = v0.coerceIn(0.82f, 0.95f)     // 够亮，能当发光色
+    hsv[1] = sOut.coerceIn(0.02f, 0.24f)
+    hsv[2] = 0.96f
     return Color(android.graphics.Color.HSVToColor(hsv))
 }
 
@@ -405,7 +412,7 @@ fun MagsApp() {
     var favs by remember { mutableStateOf(listOf<Item>()) }
     var favBusy by remember { mutableStateOf(false) }
     var favMsg by remember { mutableStateOf("") }
-    var accent by remember { mutableStateOf(Color(0xFFFFD60A)) }   // 跟随壁纸的强调色
+    var accent by remember { mutableStateOf(Color(0xFFF2F4F7)) }   // 跟随壁纸的强调色
     var hist by remember { mutableStateOf(listOf<String>()) }
 
     // 外观设置（客户端本地持久化）
