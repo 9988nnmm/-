@@ -396,17 +396,22 @@ private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
         }
         if (bestHue < 0f) return Color(fallback)
 
-        // 用 M3 的 **SchemeContent**（content-based）而不是 SchemeTonalSpot：
-        //   TonalSpot  把色度钉死在 36  → 鲜艳橙被洗成粉橘、人像图偏卡其
-        //   Content    沿用源色的色度   → 人像图实测 #E4E4A5，FlowMix 是 #E8E4A6（几乎一致）
-        // 这条是官方库里的现成方案，不用再自己发明取色规则。
-        val seedColor = com.google.android.material.color.utilities.Hct.from(
-            bestHue.toDouble(), bestChroma.toDouble().coerceAtLeast(12.0), bestTone.toDouble()
-        ).toInt()
-        val scheme = com.google.android.material.color.utilities.SchemeContent(
-            com.google.android.material.color.utilities.Hct.fromInt(seedColor), true, 0.0
-        )
-        Color(com.google.android.material.color.utilities.MaterialDynamicColors().primary().getArgb(scheme))
+        // 两套算法各有所长，按「源色色度」自动选：
+        //   高饱和壁纸（橙玩偶 C=78）→ 直接沿用源色，保住鲜艳度（旧算法，实测 #F25920 vs 他们 #FF7A33）
+        //   低饱和壁纸（暗图 C=11、人像 C=27、樱花 C=32）→ 交给 SchemeContent 抬到 tone 80，
+        //     否则会得到灰扑扑的深色（旧算法在这些图上明显不如他们）
+        // 阈值 40：四张实测壁纸分别落在 (78) 和 (11/27/32) 两侧，没有骑墙的情况。
+        val chroma = bestChroma.toDouble().coerceAtLeast(10.0)
+        val srcTone = bestTone.toDouble().coerceIn(45.0, 85.0)
+        val c = com.google.android.material.color.utilities.Hct.from(bestHue.toDouble(), chroma, srcTone)
+
+        if (chroma >= 40.0) {
+            Color(c.toInt())                       // 鲜艳壁纸：原样保留
+        } else {
+            val scheme = com.google.android.material.color.utilities.SchemeContent(c, true, 0.0)
+            Color(com.google.android.material.color.utilities.MaterialDynamicColors()
+                .primary().getArgb(scheme))        // 低饱和壁纸：提亮成浅色
+        }
     } catch (_: Throwable) {
         Color(fallback)
     }
