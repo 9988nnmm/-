@@ -1229,7 +1229,7 @@ fun MagsApp() {
         // ---- 外观设置（覆盖层） ----
         if (showSettings) {
             SettingsPane(
-                backdrop = backdrop,
+                backdrop = fgBackdrop,
                 look = look,
                 onChange = { l -> look = l; saveLook(ctx, l) },
                 hasWall = wp != null,
@@ -1271,7 +1271,13 @@ private fun SettingsPane(
     val scrimIr = remember { MutableInteractionSource() }
     Box(
         Modifier.fillMaxSize()
-            .background(Color(0x9E0B0E18))
+            // 磨砂：把下层内容模糊掉再压半透明底，既能透出壁纸颜色，又不会和设置项文字打架
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { RoundedCornerShape(0.dp) },
+                effects = { blur(26.dp.toPx()) }
+            )
+            .background(Color(0x8C0B0E18))
             .clickable(interactionSource = scrimIr, indication = null) { }   // 吞掉穿透点击
     ) {
         Column(
