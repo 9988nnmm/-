@@ -932,9 +932,10 @@ fun MagsApp() {
                         // ── 四项共用同一套宽度/高度/圆角，且胶囊与文字同一个中心 ──
                         // 贴边不靠外推、也不靠单独放大：把「共用宽度」调到槽宽减 10dp，
                         // 首尾自然就只剩同样宽的小缝（对称），中心始终压在文字中心上。
-                        val wPx = ((slotW - 10.dp.toPx()) * (1f + stretch))
-                            .coerceAtMost(slotW - 4.dp.toPx())
-                        val hPx = size.height * 0.80f
+                        // 照原版：胶囊比一档略宽、几乎顶满栏高，外端贴着栏内缘
+                        val wPx = ((slotW - 2.dp.toPx()) * (1f + stretch))
+                            .coerceAtMost(slotW - 1.dp.toPx())
+                        val hPx = size.height * 0.86f
                         // 中心 = 槽位中心 = 文字中心（不再做任何外移）
                         val cx = (slotW * (posF + 0.5f)).coerceIn(wPx / 2f, size.width - wPx / 2f)
 
@@ -946,9 +947,10 @@ fun MagsApp() {
                         ap.transform(mtx)
                         val cp = ap.asComposePath()
 
-                        // 内底：中性半透明黑（不染黄），移动时让位给色带，停稳后恢复
-                        val darkA = 0.26f * (1f - 0.70f * bandOn)
-                        drawPath(cp, Color.Black.copy(alpha = darkA))
+                        // 内底：透亮玻璃窗 —— 原版选中块比栏内更亮更清，
+                        // 所以这里抬亮而不是压暗；移动时让位给主题色环带。
+                        drawPath(cp, Color.White.copy(alpha = 0.09f * (1f - 0.5f * bandOn)))
+                        drawPath(cp, accent.copy(alpha = 0.05f * (1f - 0.6f * bandOn)))
 
                         // 移动时：同一轮廓外侧加一圈主题色带（accent 随壁纸走，不写死金黄）
                         // 色带贴在玻璃边本身：内缘清楚（1.3dp 同宽），外缘只留一点内羽化，
@@ -971,15 +973,15 @@ fun MagsApp() {
                             cp,
                             brush = Brush.linearGradient(
                                 colorStops = arrayOf(
-                                    0.00f to Color.White.copy(alpha = 0.44f),
-                                    0.38f to Color.White.copy(alpha = 0.08f),
-                                    0.66f to Color.White.copy(alpha = 0.01f),
-                                    1.00f to Color.Black.copy(alpha = 0.06f)
+                                    0.00f to Color.White.copy(alpha = 0.60f),
+                                    0.40f to Color.White.copy(alpha = 0.26f),
+                                    0.72f to Color.White.copy(alpha = 0.14f),
+                                    1.00f to Color.White.copy(alpha = 0.08f)
                                 ),
                                 start = Offset(cx - wPx * 0.5f, cy - hPx * 0.55f),
                                 end = Offset(cx + wPx * 0.5f, cy + hPx * 0.55f)
                             ),
-                            style = Stroke(1.0.dp.toPx())
+                            style = Stroke(1.1.dp.toPx())
                         )
                     }
 
