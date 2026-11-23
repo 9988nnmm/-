@@ -161,7 +161,10 @@ data class Look(
 
 // 供 SegRow 这类没有 accent 参数的组合函数读取。
 // 必须是 Compose 状态：普通 var 改了不会触发重组，设置页会一直用首次组合时的颜色。
-var ACCENT by androidx.compose.runtime.mutableStateOf(Color(0xFF7EA6F5))
+var ACCENT by androidx.compose.runtime.mutableStateOf(Color(0xFF4285F4))
+
+// 关掉「跟随壁纸取色」时用的默认系统色（Material / Android 原生的 Google 蓝）
+val DEFAULT_ACCENT = Color(0xFF4285F4)
 
 fun loadLook(ctx: Context): Look {
     val sp = ctx.getSharedPreferences("mags", Context.MODE_PRIVATE)
@@ -441,7 +444,7 @@ fun MagsApp() {
                 }
                 if (bmp != null) {
                     wp = bmp.asImageBitmap()
-                    if (look.flowColor) accent = pickAccent(bmp)
+                    accent = if (look.flowColor) pickAccent(bmp) else DEFAULT_ACCENT
                 }
             } catch (_: Exception) { }
         }
@@ -512,12 +515,12 @@ fun MagsApp() {
             val wb = withContext(Dispatchers.IO) { loadWall(ctx) }
             if (wb != null) {
                 wp = wb.asImageBitmap()
-                if (loadLook(ctx).flowColor) accent = pickAccent(wb)
+                accent = if (loadLook(ctx).flowColor) pickAccent(wb) else DEFAULT_ACCENT
             } else {
                 val bmp = withContext(Dispatchers.IO) {
                     BitmapFactory.decodeResource(ctx.resources, R.drawable.bg)
                 }
-                accent = pickAccent(bmp)
+                accent = if (loadLook(ctx).flowColor) pickAccent(bmp) else DEFAULT_ACCENT
             }
         } catch (_: Exception) { }
         try {
@@ -1236,7 +1239,17 @@ fun MagsApp() {
             SettingsPane(
                 backdrop = backdrop,
                 look = look,
-                onChange = { l -> look = l; saveLook(ctx, l) },
+                onChange = { l ->
+                    look = l; saveLook(ctx, l)
+                    // 开关「跟随壁纸取色」要立刻生效：关掉回默认系统色，打开重新取一次
+                    scope.launch {
+                        accent = if (l.flowColor) {
+                            withContext(Dispatchers.IO) {
+                                loadWall(ctx)?.let { pickAccent(it) }
+                            } ?: DEFAULT_ACCENT
+                        } else DEFAULT_ACCENT
+                    }
+                },
                 hasWall = wp != null,
                 onPickWall = {
                     try {
@@ -1253,7 +1266,7 @@ fun MagsApp() {
                             val bmp = withContext(Dispatchers.IO) {
                                 BitmapFactory.decodeResource(ctx.resources, R.drawable.bg)
                             }
-                            if (look.flowColor) accent = pickAccent(bmp)
+                            accent = if (look.flowColor) pickAccent(bmp) else DEFAULT_ACCENT
                         } catch (_: Exception) { }
                     }
                 },
@@ -1459,8 +1472,10 @@ private fun SegRow(
                 Row(Modifier.fillMaxSize()) {
                     options.forEachIndexed { i, label ->
                         val on = i == index
+                        val ir = remember { MutableInteractionSource() }
                         Box(
-                            Modifier.weight(1f).fillMaxHeight().clickable { onPick(i) },
+                            Modifier.weight(1f).fillMaxHeight()
+                                .clickable(interactionSource = ir, indication = null) { onPick(i) },
                             contentAlignment = Alignment.Center
                         ) {
                             BasicText(
