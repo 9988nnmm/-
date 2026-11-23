@@ -40,14 +40,14 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Build debug APK
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
+      - name: Build debug APK（self + friend 两个版本）
+        run: gradle :app:assembleSelfDebug :app:assembleFriendDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: mags-glass-debug
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/*/debug/*.apk
 
       # 每次构建都把 APK 挂到 latest release，手机/网页上点一下就能下，
       # 不用再去 Actions 页面翻 Artifacts（那里 90 天会过期，手机端也不好找）
@@ -58,4 +58,4 @@ jobs:
           tag_name: latest
           name: "latest build"
           make_latest: true
-          files: app/build/outputs/apk/debug/*.apk
+          files: app/build/outputs/apk/*/debug/*.apk

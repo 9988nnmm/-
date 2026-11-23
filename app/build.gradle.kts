@@ -12,8 +12,8 @@ android {
         applicationId = "com.fish.mags.glass"
         minSdk = 33
         targetSdk = 36
-        versionCode = 53
-        versionName = "4.4.2-revert-m3roles"
+        versionCode = 54
+        versionName = "4.5-friend-edition"
     }
     // 固定签名：keystore 就在模块目录里。签名稳定之后才能覆盖安装，
     // 否则每次云端构建的 debug keystore 都不同，装新包必须先卸载（会丢掉设备 UUID）。
@@ -29,11 +29,30 @@ android {
         release { isMinifyEnabled = false }
         debug { signingConfig = signingConfigs.getByName("mags") }
     }
+    // 两个版本功能完全一致，只有「投光鸭」的落盘目录不同：
+    //   self   → 用服务端 cloud.json 里配的路径（默认 /光鸭/来自：云添加）
+    //   friend → 投到 /云盘
+    flavorDimensions += "edition"
+    productFlavors {
+        create("self") {
+            dimension = "edition"
+            buildConfigField("String", "ADD_PATH", "\"\"")
+        }
+        create("friend") {
+            dimension = "edition"
+            applicationIdSuffix = ".friend"      // 独立包名，能和自己的版本共存
+            versionNameSuffix = "-friend"
+            buildConfigField("String", "ADD_PATH", "\"/云盘\"")
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 }
 
 kotlin {

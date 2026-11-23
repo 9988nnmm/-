@@ -109,6 +109,16 @@ val ENDPOINTS = listOf(
 
 @Volatile var activeBase: String? = null
 
+/**
+ * 「投光鸭」落盘目录的客户端覆盖（编译期决定，运行期不可改）。
+ *   self   版本 → 空串，用服务端 cloud.json 里的 path
+ *   friend 版本 → "&path=/云盘"
+ * 服务端 /api/add 与 /api/addall 认这个可选参数；不传就维持原行为。
+ */
+val ADD_PATH_Q: String =
+    if (com.fish.mags.BuildConfig.ADD_PATH.isBlank()) ""
+    else "&path=" + java.net.URLEncoder.encode(com.fish.mags.BuildConfig.ADD_PATH, "UTF-8")
+
 // 每台设备一个稳定的身份，首次启动生成后写进 SharedPreferences。
 // 服务端按它分桶存 history / fav / seen / added，这样不同设备的搜索记录互不干扰。
 @Volatile var DEV_UID: String = ""
@@ -1058,7 +1068,7 @@ fun MagsApp() {
                             .clickable(enabled = favs.isNotEmpty()) {
                                 scope.launch {
                                     try {
-                                        val o = api("/api/addall")
+                                        val o = api("/api/addall?" + ADD_PATH_Q.trimStart('&'))
                                         loadFavs()
                                     } catch (e: Exception) {
                                     }
@@ -1132,7 +1142,7 @@ fun MagsApp() {
                                     onAdd = {
                                         scope.launch {
                                             try {
-                                                val o = api("/api/add?h=" + it.hash)
+                                                val o = api("/api/add?h=" + it.hash + ADD_PATH_Q)
                                                 val ok = o.optBoolean("ok")
                                                 val msg = o.optString("msg")
                                                 favs = favs.toMutableList().also { l ->
@@ -1191,7 +1201,7 @@ fun MagsApp() {
                                 onAdd = {
                                     scope.launch {
                                         try {
-                                            val o = api("/api/add?h=" + it.hash)
+                                            val o = api("/api/add?h=" + it.hash + ADD_PATH_Q)
                                             val ok = o.optBoolean("ok")
                                             val msg = o.optString("msg")
                                             items = items.toMutableList().also { l ->
