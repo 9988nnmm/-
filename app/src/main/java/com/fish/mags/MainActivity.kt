@@ -310,48 +310,40 @@ suspend fun doSearch(
  * 优先鲜艳色，取不到就退回亮色/主色；再兜底保证够亮、够饱和，
  * 免得在一张暗色壁纸上发光发不出来。
  */
+/**
+ * 主题色 = 壁纸的「主导色」本身（Material Color Utilities 的 QuantizerCelebi + Score）。
+ *
+ * 这是拿 FlowMix 的截图反推验证过的：
+ *   暖色壁纸  → MCU 主导色 #D0A199，他们的强调色 #D0A098
+ *   蓝色动漫  → MCU 主导色 #6896F0，他们的强调色 #6898E8
+ * 即两端基本一致，所以不要再自作主张去压饱和度。
+ * 只有主导色过暗时（深色壁纸）才提亮到 tone 80，避免得到一团黑。
+ */
 private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
-    val fallback = 0xFFF2F4F7.toInt()
+    val fallback = 0xFFD0A199.toInt()
     if (bitmap == null) return Color(fallback)
+    return try {
+        val n = 96
+        val small = android.graphics.Bitmap.createScaledBitmap(bitmap, n, n, true)
+        val px = IntArray(n * n)
+        small.getPixels(px, 0, n, 0, 0, n, n)
+        for (i in px.indices) px[i] = px[i] or 0xFF000000.toInt()
 
-    val n = 48
-    val small = android.graphics.Bitmap.createScaledBitmap(bitmap, n, n, true)
-    val px = IntArray(n * n)
-    small.getPixels(px, 0, n, 0, 0, n, n)
+        val q = com.google.android.material.color.utilities.QuantizerCelebi.quantize(px, 128)
+        val seed = com.google.android.material.color.utilities.Score.score(q).firstOrNull()
+            ?: return Color(fallback)
+        val hct = com.google.android.material.color.utilities.Hct.fromInt(seed)
 
-    val bins = FloatArray(36); val satSum = FloatArray(36)
-    var vSum = 0f; var cnt = 0
-    val hsv = FloatArray(3)
-    for (c in px) {
-        if (android.graphics.Color.alpha(c) < 200) continue
-        android.graphics.Color.colorToHSV(c, hsv)
-        vSum += hsv[2]; cnt++
-        if (hsv[2] < 0.10f || hsv[1] < 0.06f) continue
-        val b = (hsv[0] / 10f).toInt().coerceIn(0, 35)
-        val w = hsv[1] * hsv[2]
-        bins[b] += w; satSum[b] += hsv[1] * w
+        var tone = hct.tone
+        var chroma = hct.chroma
+        if (tone < 40.0) {                       // 壁纸太暗：提亮，但保留色相
+            tone = 80.0
+            if (chroma < 8.0) chroma = 12.0
+        }
+        Color(com.google.android.material.color.utilities.Hct.from(hct.hue, chroma, tone).toInt())
+    } catch (_: Throwable) {
+        Color(fallback)
     }
-    var best = -1; var bestW = 0f
-    for (i in 0 until 36) {
-        val w = bins[i] + bins[(i + 35) % 36] * 0.5f + bins[(i + 1) % 36] * 0.5f
-        if (w > bestW) { bestW = w; best = i }
-    }
-    val meanV = if (cnt > 0) vSum / cnt else 0.4f
-    if (best < 0 || bins[best] <= 0f) return Color(fallback)
-
-    val sDom = satSum[best] / bins[best]
-
-    // ── 关键：不是「取一个鲜艳色」，而是取一个「很亮的淡色调」 ──
-    // 对照 FlowMix 两张截图反推：
-    //   暖色壁纸 → 淡鲑粉（V≈0.96, S≈0.20）
-    //   暗色壁纸 → 近白微冷（V≈0.97, S≈0.03）
-    // 也就是 S 压到很低、V 拉到接近白，只保留壁纸的色相倾向。
-    var sOut = sDom * 0.50f
-    if (meanV < 0.35f) sOut *= 0.35f      // 壁纸本身暗 → 更接近纯白
-    hsv[0] = best * 10f + 5f
-    hsv[1] = sOut.coerceIn(0.02f, 0.24f)
-    hsv[2] = 0.96f
-    return Color(android.graphics.Color.HSVToColor(hsv))
 }
 
 // 得意黑（Smiley Sans）—— 免费可商用，倾斜异形
