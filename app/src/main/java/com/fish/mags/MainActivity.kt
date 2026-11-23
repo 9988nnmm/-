@@ -935,7 +935,7 @@ fun MagsApp() {
                         // 照原版：胶囊比一档略宽、几乎顶满栏高，外端贴着栏内缘
                         val wPx = ((slotW - 2.dp.toPx()) * (1f + stretch))
                             .coerceAtMost(slotW - 1.dp.toPx())
-                        val hPx = size.height * 0.86f
+                        val hPx = size.height * 0.82f
                         // 中心 = 槽位中心 = 文字中心（不再做任何外移）
                         val cx = (slotW * (posF + 0.5f)).coerceIn(wPx / 2f, size.width - wPx / 2f)
 
@@ -949,8 +949,14 @@ fun MagsApp() {
 
                         // 内底：透亮玻璃窗 —— 原版选中块比栏内更亮更清，
                         // 所以这里抬亮而不是压暗；移动时让位给主题色环带。
-                        drawPath(cp, Color.White.copy(alpha = 0.09f * (1f - 0.5f * bandOn)))
-                        drawPath(cp, accent.copy(alpha = 0.05f * (1f - 0.6f * bandOn)))
+                        // 玻璃窗：中央抬亮 + 一圈内缘厚度光，才和栏内拉开层次
+                        drawPath(cp, Color.White.copy(alpha = 0.15f * (1f - 0.45f * bandOn)))
+                        drawPath(cp, accent.copy(alpha = 0.06f * (1f - 0.6f * bandOn)))
+                        drawPath(
+                            cp,
+                            Color.White.copy(alpha = 0.10f * (1f - 0.5f * bandOn)),
+                            style = Stroke(3.2.dp.toPx())
+                        )
 
                         // 移动时：同一轮廓外侧加一圈主题色带（accent 随壁纸走，不写死金黄）
                         // 色带贴在玻璃边本身：内缘清楚（1.3dp 同宽），外缘只留一点内羽化，
