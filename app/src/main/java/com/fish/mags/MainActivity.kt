@@ -203,6 +203,14 @@ fun saveLook(ctx: Context, l: Look) {
 
 private fun wallFile(ctx: Context) = java.io.File(ctx.filesDir, "wallpaper.jpg")
 
+/**
+ * 当前正在显示的那张壁纸（取色用）。
+ * 用户选过图就用文件，否则回落到内置图 —— 之前开关「跟随壁纸取色」时只读文件，
+ * 用内置壁纸的情况下读到 null 就退回了默认系统色，导致「关一次再开，颜色永远是默认色」。
+ */
+private fun currentWallBitmap(ctx: Context): android.graphics.Bitmap? =
+    loadWall(ctx) ?: android.graphics.BitmapFactory.decodeResource(ctx.resources, R.drawable.bg)
+
 private fun loadWall(ctx: Context): android.graphics.Bitmap? {
     val f = wallFile(ctx)
     if (!f.exists()) return null
@@ -1319,7 +1327,9 @@ fun MagsApp() {
                     // 开关「跟随壁纸取色」要立刻生效：关掉回默认系统色，打开重新取一次
                     scope.launch {
                         accent = if (l.flowColor) {
-                            withContext(Dispatchers.IO) { loadWall(ctx)?.let { pickAccent(it) } } ?: DEFAULT_ACCENT
+                            withContext(Dispatchers.IO) {
+                                currentWallBitmap(ctx)?.let { pickAccent(it) }
+                            } ?: DEFAULT_ACCENT
                         } else DEFAULT_ACCENT
                     }
                 },
