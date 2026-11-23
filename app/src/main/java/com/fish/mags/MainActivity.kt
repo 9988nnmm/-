@@ -487,7 +487,9 @@ fun MagsApp() {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) scope.launch {
             try {
-                val bmp = withContext(Dispatchers.IO) {
+                // 取色也在 IO 线程算完，和壁纸一起提交：
+                // 否则会出现「壁纸已经换了、按钮还是上一个颜色」闪一下（实测约 150ms）
+                val res = withContext(Dispatchers.IO) {
                     val ins = ctx.contentResolver.openInputStream(uri)
                     val raw = ins?.use { BitmapFactory.decodeStream(it) }
                     if (raw == null) null else {
@@ -498,12 +500,13 @@ fun MagsApp() {
                         java.io.FileOutputStream(wallFile(ctx)).use {
                             scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, it)
                         }
-                        scaled
+                        val acc = if (look.flowColor) pickAccent(scaled) else DEFAULT_ACCENT
+                        scaled.asImageBitmap() to acc
                     }
                 }
-                if (bmp != null) {
-                    wp = bmp.asImageBitmap(); wallEpoch++
-                    accent = if (look.flowColor) pickAccent(bmp) else DEFAULT_ACCENT
+                if (res != null) {
+                    accent = res.second
+                    wp = res.first; wallEpoch++
                 }
             } catch (_: Exception) { }
         }
@@ -573,8 +576,11 @@ fun MagsApp() {
         try {
             val wb = withContext(Dispatchers.IO) { loadWall(ctx) }
             if (wb != null) {
+                val acc = withContext(Dispatchers.Default) {
+                    if (loadLook(ctx).flowColor) pickAccent(wb) else DEFAULT_ACCENT
+                }
+                accent = acc
                 wp = wb.asImageBitmap(); wallEpoch++
-                accent = if (loadLook(ctx).flowColor) pickAccent(wb) else DEFAULT_ACCENT
             } else {
                 val bmp = withContext(Dispatchers.IO) {
                     BitmapFactory.decodeResource(ctx.resources, R.drawable.bg)
@@ -1319,14 +1325,15 @@ fun MagsApp() {
                 },
                 onResetWall = {
                     try { wallFile(ctx).delete() } catch (_: Exception) { }
-                    wp = null; wallEpoch++
                     scope.launch {
-                        try {
-                            val bmp = withContext(Dispatchers.IO) {
-                                BitmapFactory.decodeResource(ctx.resources, R.drawable.bg)
+                        val acc = try {
+                            withContext(Dispatchers.IO) {
+                                val bmp = BitmapFactory.decodeResource(ctx.resources, R.drawable.bg)
+                                if (look.flowColor) pickAccent(bmp) else DEFAULT_ACCENT
                             }
-                            accent = if (look.flowColor) pickAccent(bmp) else DEFAULT_ACCENT
-                        } catch (_: Exception) { }
+                        } catch (_: Exception) { DEFAULT_ACCENT }
+                        accent = acc
+                        wp = null; wallEpoch++
                     }
                 },
                 onClose = { showSettings = false }
