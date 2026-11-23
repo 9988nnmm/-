@@ -351,13 +351,12 @@ private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
             ?: return Color(fallback)
         val hct = com.google.android.material.color.utilities.Hct.fromInt(seed)
 
-        var tone = hct.tone
-        var chroma = hct.chroma
-        if (tone < 40.0) {                       // 壁纸太暗：提亮，但保留色相
-            tone = 80.0
-            if (chroma < 8.0) chroma = 12.0
-        }
-        Color(com.google.android.material.color.utilities.Hct.from(hct.hue, chroma, tone).toInt())
+        // 交给 M3 的方案去求 primary：它会把结果统一到 tone 80 / chroma 36。
+        // 之前是手动 tone<40 就跳到 80 —— 种子 tone 39 与 41 会得到两个完全不同的颜色，
+        // 同一张壁纸在"选图后立刻算"和"开关取色后重算"两条路径上色差极大，就是那个阈值造成的。
+        val scheme = com.google.android.material.color.utilities.SchemeTonalSpot(hct, true, 0.0)
+        val mdc = com.google.android.material.color.utilities.MaterialDynamicColors()
+        Color(mdc.primary().getArgb(scheme))
     } catch (_: Throwable) {
         Color(fallback)
     }
