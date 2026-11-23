@@ -929,24 +929,14 @@ fun MagsApp() {
                         val cy = size.height / 2f
                         val posF = if (dragging) dragPos else ind.value
 
-                        // ── 四项共用同一套尺寸；贴边只靠落点外移 ──
-                        val inset = 2.dp.toPx()
-                        val baseW = slotW * 0.80f
-                        val wPx = (baseW * (1f + stretch)).coerceAtMost(slotW - 4.dp.toPx())
-                        val hPx = size.height * 0.80f        // 高度恒定，不随贴边变化
-                        val cxRaw = slotW * (posF + 0.5f)
-
-                        val pullL = if (posF < 1f) (1f - posF).coerceIn(0f, 1f) else 0f
-                        val pullR = if (posF > last - 1f) (posF - (last - 1f)).coerceIn(0f, 1f) else 0f
-
-                        // 落点最多外移 8dp：靠近端头时胶囊整体朝外挪，尺寸不变
-                        val hugMax = 8.dp.toPx()
-                        val half = wPx / 2f
-                        val minC = inset + half
-                        val maxC = size.width - inset - half
-                        val cxWant = cxRaw - hugMax * pullL + hugMax * pullR
-                        val cx = if (minC <= maxC) cxWant.coerceIn(minC, maxC)
-                                 else size.width / 2f
+                        // ── 四项共用同一套宽度/高度/圆角，且胶囊与文字同一个中心 ──
+                        // 贴边不靠外推、也不靠单独放大：把「共用宽度」调到槽宽减 10dp，
+                        // 首尾自然就只剩同样宽的小缝（对称），中心始终压在文字中心上。
+                        val wPx = ((slotW - 10.dp.toPx()) * (1f + stretch))
+                            .coerceAtMost(slotW - 4.dp.toPx())
+                        val hPx = size.height * 0.80f
+                        // 中心 = 槽位中心 = 文字中心（不再做任何外移）
+                        val cx = (slotW * (posF + 0.5f)).coerceIn(wPx / 2f, size.width - wPx / 2f)
 
                         val ap = android.graphics.Path()
                         PillMorph.toPath((stretch / 0.25f).coerceIn(0f, 1f), ap)
