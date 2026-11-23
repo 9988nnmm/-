@@ -385,6 +385,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MagsApp() {
     val backdrop = rememberLayerBackdrop()
+    // 前景层：包含列表内容，悬浮条（翻页条）用它采样，才能真正"透"出后面的卡片
+    val fgBackdrop = rememberLayerBackdrop()
     val scope = rememberCoroutineScope()
     val kb = LocalSoftwareKeyboardController.current
     val clip = LocalClipboardManager.current
@@ -579,7 +581,7 @@ fun MagsApp() {
         }
 
         // ============ 前景 ============
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().layerBackdrop(fgBackdrop)) {
 
             // ---- 顶栏 ----
             Column(
@@ -861,7 +863,7 @@ fun MagsApp() {
                                 highlight = GlassHi
                             )
                             .clip(RoundedCornerShape(23.dp))
-                            .background(Color(0x7A090B10))          // 压一层深色，接近它的不透明度
+                            .background(Color(0x2E101828))          // 只压很薄一层，保持和其它玻璃一样透
                             .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(23.dp))
                             // 一个手势区同时处理：原地松手=点击，拖动=跟手
                             .pointerInput(tabPx) {
@@ -1206,7 +1208,7 @@ fun MagsApp() {
                     .navigationBarsPadding()
                     .height(44.dp)
                     .drawBackdrop(
-                        backdrop = backdrop,
+                        backdrop = fgBackdrop,
                         shape = { RoundedCornerShape(22.dp) },
                         effects = { glass(Glass(3.dp, 8.dp, 16.dp)) }
                     )
