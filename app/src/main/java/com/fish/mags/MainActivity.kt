@@ -116,8 +116,8 @@ val ENDPOINTS = listOf(
  * 服务端 /api/add 与 /api/addall 认这个可选参数；不传就维持原行为。
  */
 val ADD_PATH_Q: String =
-    if (com.fish.mags.BuildConfig.ADD_PATH.isBlank()) ""
-    else "&path=" + java.net.URLEncoder.encode(com.fish.mags.BuildConfig.ADD_PATH, "UTF-8")
+    if (com.fish.mags.glass.BuildConfig.ADD_PATH.isBlank()) ""
+    else "&path=" + java.net.URLEncoder.encode(com.fish.mags.glass.BuildConfig.ADD_PATH, "UTF-8")
 
 // 每台设备一个稳定的身份，首次启动生成后写进 SharedPreferences。
 // 服务端按它分桶存 history / fav / seen / added，这样不同设备的搜索记录互不干扰。
