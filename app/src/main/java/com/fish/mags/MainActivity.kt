@@ -1210,9 +1210,10 @@ fun MagsApp() {
                     .drawBackdrop(
                         backdrop = fgBackdrop,
                         shape = { RoundedCornerShape(22.dp) },
-                        effects = { glass(Glass(3.dp, 8.dp, 16.dp)) }
+                        effects = { glass(Glass(2.dp, 8.dp, 16.dp, sat = 1.05f)) }
                     )
                     .clip(RoundedCornerShape(22.dp))
+                    .background(Color(0x1F000000))      // 极淡压一层，保证字可读又不挡住内容
                     .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(22.dp))
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
