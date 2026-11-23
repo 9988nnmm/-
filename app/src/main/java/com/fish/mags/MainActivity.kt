@@ -159,8 +159,9 @@ data class Look(
 // 绘制线程要读，用 @Volatile 而不进 Compose 状态；界面侧改了 look 会触发重组再同步过来
 @Volatile var LOOK = Look()
 
-// 供 SegRow 这类没有 accent 参数的组合函数读取（由 SideEffect 同步）
-@Volatile var ACCENT: Color = Color(0xFF7EA6F5)
+// 供 SegRow 这类没有 accent 参数的组合函数读取。
+// 必须是 Compose 状态：普通 var 改了不会触发重组，设置页会一直用首次组合时的颜色。
+var ACCENT by androidx.compose.runtime.mutableStateOf(Color(0xFF7EA6F5))
 
 fun loadLook(ctx: Context): Look {
     val sp = ctx.getSharedPreferences("mags", Context.MODE_PRIVATE)
@@ -1453,7 +1454,7 @@ private fun SegRow(
                         .fillMaxHeight()
                         .padding(4.dp)
                         .clip(RoundedCornerShape(17.dp))
-                        .background(ACCENT.copy(alpha = 0.92f))
+                        .background(ACCENT)
                 )
                 Row(Modifier.fillMaxSize()) {
                     options.forEachIndexed { i, label ->
@@ -1466,7 +1467,7 @@ private fun SegRow(
                                 label,
                                 style = ts(
                                     12.5f,
-                                    if (on) Color(0xFF0B1020) else Color(0xB3FFFFFF),
+                                    if (on) Color.White else Color(0xB3FFFFFF),
                                     if (on) FontWeight.Bold else FontWeight.Medium
                                 ),
                                 maxLines = 1, softWrap = false
