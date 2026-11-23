@@ -1366,6 +1366,56 @@ private fun SectionTitle(t: String) {
 }
 
 @Composable
+private fun PillText(txt: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier.clip(RoundedCornerShape(11.dp))
+            .background(Color(0x33FFFFFF))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        BasicText(
+            txt, style = ts(11.5f, Color(0xDDE0F2FE)),
+            maxLines = 1, softWrap = false,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun CenterHint(txt: String) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        BasicText(txt, style = ts(13.5f, Color(0x99FFFFFF)))
+    }
+}
+
+@Composable
+private fun ActionRow(
+    backdrop: LayerBackdrop,
+    label: String,
+    onClick: () -> Unit,
+    faint: Boolean = false
+) {
+    Box(
+        Modifier.fillMaxWidth()
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { RoundedCornerShape(19.dp) },
+                effects = { glass(Glass(2.dp, 8.dp, 16.dp, chromatic = false)) }
+            )
+            .clip(RoundedCornerShape(19.dp))
+            .clickable { onClick() }
+            .padding(vertical = 14.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        BasicText(
+            label,
+            style = ts(13.5f, if (faint) Color(0x99FFFFFF) else Color(0xFFBAE6FD), FontWeight.SemiBold),
+            maxLines = 1,
+            softWrap = false
+        )
+    }
+}
+
+@Composable
 private fun SegRow(
     backdrop: LayerBackdrop,
     title: String,
