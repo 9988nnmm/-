@@ -380,6 +380,7 @@ private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
 
         var bestHue = -1f
         var bestChroma = -1f
+        var bestTone = 70f
         var bestShare = 0f
         for ((color, count) in q) {
             val share = count / total
@@ -389,16 +390,20 @@ private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
             if (hct.chroma > bestChroma) {
                 bestChroma = hct.chroma.toFloat()
                 bestHue = hct.hue.toFloat()
+                bestTone = hct.tone.toFloat()
                 bestShare = share
             }
         }
         if (bestHue < 0f) return Color(fallback)
 
-        val scheme = com.google.android.material.color.utilities.SchemeTonalSpot(
-            com.google.android.material.color.utilities.Hct.from(bestHue.toDouble(), 36.0, 70.0),
-            true, 0.0
-        )
-        Color(com.google.android.material.color.utilities.MaterialDynamicColors().primary().getArgb(scheme))
+        // 直接沿用这个簇自己的色相/色度/明度，只做安全夹取：
+        //   tone 太低在深色背景上看不见（下限 45），太高会发白（上限 85）
+        //   chroma 太低会发灰（下限 16）
+        // 之前强推成 M3 的 chroma 36 / tone 80，鲜艳的橙色壁纸会被洗成粉橘（#FF6A2A → #FFB59A）。
+        val tone = bestTone.coerceIn(45f, 85f)
+        val chroma = bestChroma.coerceIn(16f, 100f)
+        Color(com.google.android.material.color.utilities.Hct.from(
+            bestHue.toDouble(), chroma.toDouble(), tone.toDouble()).toInt())
     } catch (_: Throwable) {
         Color(fallback)
     }
@@ -473,6 +478,9 @@ fun MagsApp() {
     var look by remember { mutableStateOf(loadLook(ctx)) }
     LOOK = look
     var wp by remember { mutableStateOf<ImageBitmap?>(null) }
+    // 换壁纸后让背景层整体重建一次：layerBackdrop 的纹理是异步记录的，
+    // 只改 Image 的话设置页那层玻璃会有一半还在用旧壁纸（实测：下半屏仍是旧底色）。
+    var wallEpoch by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var showSettings by remember { mutableStateOf(false) }
 
     // 相册选图 → 压到 2160px 宽、存 filesDir，再拿它当壁纸和取色源
@@ -494,7 +502,7 @@ fun MagsApp() {
                     }
                 }
                 if (bmp != null) {
-                    wp = bmp.asImageBitmap()
+                    wp = bmp.asImageBitmap(); wallEpoch++
                     accent = if (look.flowColor) pickAccent(bmp) else DEFAULT_ACCENT
                 }
             } catch (_: Exception) { }
@@ -565,7 +573,7 @@ fun MagsApp() {
         try {
             val wb = withContext(Dispatchers.IO) { loadWall(ctx) }
             if (wb != null) {
-                wp = wb.asImageBitmap()
+                wp = wb.asImageBitmap(); wallEpoch++
                 accent = if (loadLook(ctx).flowColor) pickAccent(wb) else DEFAULT_ACCENT
             } else {
                 val bmp = withContext(Dispatchers.IO) {
@@ -595,6 +603,7 @@ fun MagsApp() {
     Box(Modifier.fillMaxSize()) {
 
         // ============ 背景层（玻璃折射的内容） ============
+        androidx.compose.runtime.key(wallEpoch) {
         Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
             // 背景：用户选的壁纸优先，否则内置樱花图（都铺满 + 裁切）
             val curWp = wp
@@ -639,6 +648,7 @@ fun MagsApp() {
             )
         }
 
+        }
         // ============ 前景 ============
         Column(Modifier.fillMaxSize().layerBackdrop(fgBackdrop)) {
 
@@ -1309,7 +1319,7 @@ fun MagsApp() {
                 },
                 onResetWall = {
                     try { wallFile(ctx).delete() } catch (_: Exception) { }
-                    wp = null
+                    wp = null; wallEpoch++
                     scope.launch {
                         try {
                             val bmp = withContext(Dispatchers.IO) {
