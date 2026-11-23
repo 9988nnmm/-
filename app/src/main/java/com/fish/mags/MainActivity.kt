@@ -981,15 +981,15 @@ fun MagsApp() {
                                     0.06f to Color.Black.copy(alpha = 0.10f),   // 右下一点暗边
                                     0.16f to Color.Transparent,
                                     0.50f to Color.Transparent,
-                                    0.56f to Color.White.copy(alpha = 0.30f),
-                                    0.63f to Color.White.copy(alpha = 0.55f),
-                                    0.70f to Color.White.copy(alpha = 0.22f),
+                                    0.54f to Color.White.copy(alpha = 0.45f),
+                                    0.60f to Color.White.copy(alpha = 0.80f),
+                                    0.68f to Color.White.copy(alpha = 0.45f),
                                     0.76f to Color.Transparent,
                                     1.00f to Color.Transparent
                                 ),
                                 center = Offset(cx, cy)
                             ),
-                            style = Stroke(1.3.dp.toPx())
+                            style = Stroke(1.6.dp.toPx())
                         )
                     }
 
