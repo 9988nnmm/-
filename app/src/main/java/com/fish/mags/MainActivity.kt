@@ -1016,7 +1016,8 @@ fun MagsApp() {
                             // 未选压到 55% 白，接近 FlowMix 那种「高亮项白、其余灰」的读法
                             val tc = androidx.compose.ui.graphics.lerp(
                                 Color(0x8CFFFFFF),
-                                if (accent.luminance() > 0.8f) Color.White else accent,
+                                // 选中一律纯白：强调色可能是与壁纸同色的饱和色，压在壁纸上会看不见
+                                Color.White,
                                 near * near
                             )
                             Box(
