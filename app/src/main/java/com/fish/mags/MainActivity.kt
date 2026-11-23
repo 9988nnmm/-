@@ -396,14 +396,17 @@ private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
         }
         if (bestHue < 0f) return Color(fallback)
 
-        // 直接沿用这个簇自己的色相/色度/明度，只做安全夹取：
-        //   tone 太低在深色背景上看不见（下限 45），太高会发白（上限 85）
-        //   chroma 太低会发灰（下限 16）
-        // 之前强推成 M3 的 chroma 36 / tone 80，鲜艳的橙色壁纸会被洗成粉橘（#FF6A2A → #FFB59A）。
-        val tone = bestTone.coerceIn(45f, 85f)
-        val chroma = bestChroma.coerceIn(16f, 100f)
-        Color(com.google.android.material.color.utilities.Hct.from(
-            bestHue.toDouble(), chroma.toDouble(), tone.toDouble()).toInt())
+        // 用 M3 的 **SchemeContent**（content-based）而不是 SchemeTonalSpot：
+        //   TonalSpot  把色度钉死在 36  → 鲜艳橙被洗成粉橘、人像图偏卡其
+        //   Content    沿用源色的色度   → 人像图实测 #E4E4A5，FlowMix 是 #E8E4A6（几乎一致）
+        // 这条是官方库里的现成方案，不用再自己发明取色规则。
+        val seedColor = com.google.android.material.color.utilities.Hct.from(
+            bestHue.toDouble(), bestChroma.toDouble().coerceAtLeast(12.0), bestTone.toDouble()
+        ).toInt()
+        val scheme = com.google.android.material.color.utilities.SchemeContent(
+            com.google.android.material.color.utilities.Hct.fromInt(seedColor), true, 0.0
+        )
+        Color(com.google.android.material.color.utilities.MaterialDynamicColors().primary().getArgb(scheme))
     } catch (_: Throwable) {
         Color(fallback)
     }
