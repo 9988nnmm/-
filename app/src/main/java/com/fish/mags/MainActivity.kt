@@ -763,7 +763,7 @@ fun MagsApp() {
                         BasicText(
                             if (loading) "…" else "刷新",
                             style = ts(12.5f,
-                                if (loading) Color(0x66FFFFFF) else Color(0xFFBAE6FD),
+                                if (loading) Color(0x66FFFFFF) else accent,
                                 FontWeight.SemiBold),
                             maxLines = 1,
                             softWrap = false
@@ -1016,8 +1016,7 @@ fun MagsApp() {
                             // 未选压到 55% 白，接近 FlowMix 那种「高亮项白、其余灰」的读法
                             val tc = androidx.compose.ui.graphics.lerp(
                                 Color(0x8CFFFFFF),
-                                // 选中一律纯白：强调色可能是与壁纸同色的饱和色，压在壁纸上会看不见
-                                Color.White,
+                                accent,   // 选中字用壁纸主题色
                                 near * near
                             )
                             Box(
@@ -1218,11 +1217,11 @@ fun MagsApp() {
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                PagBtn("← 上一页", page > 1) { runSearch(query, sort, page - 1) }
+                PagBtn("← 上一页", page > 1, accent) { runSearch(query, sort, page - 1) }
                 Spacer(Modifier.weight(1f))
                 BasicText("$page / $pages", style = ts(13f, Color(0xCCFFFFFF), FontWeight.Bold))
                 Spacer(Modifier.weight(1f))
-                PagBtn("下一页 →", page < pages) { runSearch(query, sort, page + 1) }
+                PagBtn("下一页 →", page < pages, accent) { runSearch(query, sort, page + 1) }
             }
         }
 
@@ -1271,7 +1270,7 @@ private fun SettingsPane(
     val scrimIr = remember { MutableInteractionSource() }
     Box(
         Modifier.fillMaxSize()
-            .background(Color(0xF2090C14))
+            .background(Color(0x9E0B0E18))
             .clickable(interactionSource = scrimIr, indication = null) { }   // 吞掉穿透点击
     ) {
         Column(
@@ -1444,10 +1443,10 @@ private fun CenterHint(txt: String) {
 }
 
 @Composable
-private fun PagBtn(label: String, enabled: Boolean, onClick: () -> Unit) {
+private fun PagBtn(label: String, enabled: Boolean, tint: Color, onClick: () -> Unit) {
     BasicText(
         label,
-        style = ts(13.5f, if (enabled) Color(0xFFBAE6FD) else Color(0x44FFFFFF),
+        style = ts(13.5f, if (enabled) tint else Color(0x44FFFFFF),
             if (enabled) FontWeight.SemiBold else FontWeight.Normal),
         modifier = Modifier
             .pressBounce(remember { MutableInteractionSource() }, 0.9f)
