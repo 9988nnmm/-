@@ -310,17 +310,39 @@ suspend fun doSearch(
  * 免得在一张暗色壁纸上发光发不出来。
  */
 private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
-    val fallback = 0xFFFFD60A.toInt()
+    val fallback = 0xFFE2A18F.toInt()          // 兜底用柔和暖调，不再用纯黄
     if (bitmap == null) return Color(fallback)
-    val p = Palette.from(bitmap).clearFilters().generate()
-    val raw = p.vibrantSwatch?.rgb
-        ?: p.lightVibrantSwatch?.rgb
-        ?: p.dominantSwatch?.rgb
-        ?: fallback
+
+    // 缩到 48×48 采样后按色相投票：面积 × 饱和度 × 明度。
+    // 这样不会被一小块高饱和杂色（比如壁纸边角的一点蓝）带偏 —— Palette.vibrant 就是这个问题。
+    val n = 48
+    val small = android.graphics.Bitmap.createScaledBitmap(bitmap, n, n, true)
+    val px = IntArray(n * n)
+    small.getPixels(px, 0, n, 0, 0, n, n)
+
+    val bins = FloatArray(36); val satSum = FloatArray(36); val valSum = FloatArray(36)
     val hsv = FloatArray(3)
-    android.graphics.Color.colorToHSV(raw, hsv)
-    hsv[1] = maxOf(hsv[1], 0.52f)   // 别太灰
-    hsv[2] = maxOf(hsv[2], 0.88f)   // 别太暗，要能当发光色
+    for (c in px) {
+        if (android.graphics.Color.alpha(c) < 200) continue
+        android.graphics.Color.colorToHSV(c, hsv)
+        if (hsv[2] < 0.12f || hsv[1] < 0.10f) continue     // 太暗/太灰的不参与
+        val b = (hsv[0] / 10f).toInt().coerceIn(0, 35)
+        val w = hsv[1] * hsv[2]
+        bins[b] += w; satSum[b] += hsv[1] * w; valSum[b] += hsv[2] * w
+    }
+    var best = -1; var bestW = 0f
+    for (i in 0 until 36) {
+        // 相邻桶合并，避免色相边界把同一片颜色劈成两半
+        val w = bins[i] + bins[(i + 35) % 36] * 0.5f + bins[(i + 1) % 36] * 0.5f
+        if (w > bestW) { bestW = w; best = i }
+    }
+    if (best < 0 || bins[best] <= 0f) return Color(fallback)
+
+    val s0 = satSum[best] / bins[best]
+    val v0 = valSum[best] / bins[best]
+    hsv[0] = best * 10f + 5f
+    hsv[1] = s0.coerceIn(0.30f, 0.55f)     // 柔和但有存在感，接近 FlowMix 的调子
+    hsv[2] = v0.coerceIn(0.82f, 0.95f)     // 够亮，能当发光色
     return Color(android.graphics.Color.HSVToColor(hsv))
 }
 
@@ -704,10 +726,20 @@ fun MagsApp() {
 
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    PillText("· $chan")
-                    Spacer(Modifier.width(8.dp))
-                    if (total > 0) PillText("$total 条 · 第 $page/$pages 页")
-                    Spacer(Modifier.weight(1f))
+                    // 左侧信息占剩余宽度并可收缩，右侧三个按钮固定宽度 —— 结果条数再多也挤不掉 ⚙
+                    Row(
+                        Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        PillText("· $chan")
+                        if (total > 0) {
+                            Spacer(Modifier.width(8.dp))
+                            PillText(
+                                "$total 条 · 第 $page/$pages 页",
+                                Modifier.weight(1f, fill = false)
+                            )
+                        }
+                    }
                     Spacer(Modifier.width(8.dp))
                     // 刷新：强制清缓存 + 清源冷却 + 重探代理，再重搜当前页
                     val refreshIr = remember { MutableInteractionSource() }
@@ -1380,13 +1412,17 @@ private fun ActionRow(
 }
 
 @Composable
-private fun PillText(txt: String) {
+private fun PillText(txt: String, modifier: Modifier = Modifier) {
     Box(
-        Modifier.clip(RoundedCornerShape(11.dp))
+        modifier.clip(RoundedCornerShape(11.dp))
             .background(Color(0x33FFFFFF))
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
-        BasicText(txt, style = ts(11.5f, Color(0xDDE0F2FE)), maxLines = 1, softWrap = false)
+        BasicText(
+            txt, style = ts(11.5f, Color(0xDDE0F2FE)),
+            maxLines = 1, softWrap = false,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
     }
 }
 
