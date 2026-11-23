@@ -59,7 +59,9 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
 import androidx.graphics.shapes.Morph
 import androidx.graphics.shapes.RoundedPolygon
+import androidx.graphics.shapes.CornerRounding
 import androidx.graphics.shapes.pill
+import androidx.graphics.shapes.rectangle
 import androidx.graphics.shapes.toPath
 import androidx.palette.graphics.Palette
 import androidx.compose.ui.layout.ContentScale
@@ -198,8 +200,13 @@ private fun loadWall(ctx: Context): android.graphics.Bitmap? {
 // 指示器形状：FlowMix 用的是 androidx.graphics.shapes 的 RoundedPolygon + Morph
 // （反编译里能看到它把 List<RoundedPolygon> 两两配成 Morph，再 toPath(progress)）。
 // 这里照做：常态一个胶囊，拉长态一个更宽的胶囊，用 stretch 当 morph 进度。
-private val PillNormal by lazy { RoundedPolygon.pill(width = 1.0f, height = 0.62f) }
-private val PillWide by lazy { RoundedPolygon.pill(width = 1.34f, height = 0.62f) }
+// 原版是「圆角矩形」不是全圆头胶囊：圆角约为高度的 32%（全圆头是 50%）
+private val PillNormal by lazy {
+    RoundedPolygon.rectangle(width = 1.0f, height = 0.62f, rounding = CornerRounding(0.20f))
+}
+private val PillWide by lazy {
+    RoundedPolygon.rectangle(width = 1.28f, height = 0.62f, rounding = CornerRounding(0.20f))
+}
 private val PillMorph by lazy { Morph(PillNormal, PillWide) }
 
 // 边缘高光：玻璃在花壁纸上要靠这一圈亮边才「立」得起来（FlowMix 的卡片也是这个感觉）
