@@ -348,43 +348,55 @@ suspend fun doSearch(
  * 最后统一交给 M3 的 SchemeTonalSpot 归一化（tone 80 / chroma 36），
  * 这样同一张图在任何路径下都算出同一个颜色，不会再出现"选完壁纸一个色、重算另一个色"。
  */
+/**
+ * 从壁纸取强调色。
+ *
+ * 走过的两条弯路（都实测验证过）：
+ *   1) 取「面积最大的颜色」→ 常拿到背景（樱花图的紫雾 → 淡紫）
+ *   2) 取「亮部 10% 的平均色相」→ 壁纸一过曝就崩：小黄鸭那张 71% 是纯白，
+ *      亮部全是近白像素，色相纯属噪声，平均后落到青色，和画面完全不搭。
+ *
+ * 现在的规则：**在图里找出「面积够大且最鲜艳」的那个色簇**。
+ *   - 面积 < 1% 的丢掉（避免噪点/压缩边缘）
+ *   - 色度 < 10 的丢掉（纯白纯黑没有色相）
+ *   - 取剩下的里面色度最高的，用它的色相
+ *   - 最后交给 M3 的 SchemeTonalSpot 归一化（tone 80 / chroma 36）
+ *
+ * 实测：小黄鸭 → 选中 #F2B032（16.7% 面积，C=51.7）→ #EFBF6D 琥珀黄，和 FlowMix 一致。
+ */
 private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
     val fallback = 0xFFD0A199.toInt()
     if (bitmap == null) return Color(fallback)
     return try {
-        val n = 96
+        val n = 120
         val small = android.graphics.Bitmap.createScaledBitmap(bitmap, n, n, true)
         val px = IntArray(n * n)
         small.getPixels(px, 0, n, 0, 0, n, n)
+        for (i in px.indices) px[i] = px[i] or 0xFF000000.toInt()
 
-        val tones = FloatArray(n * n)
-        val hues = FloatArray(n * n)
-        val chromas = FloatArray(n * n)
-        for (i in px.indices) {
-            val h = com.google.android.material.color.utilities.Hct.fromInt(px[i] or 0xFF000000.toInt())
-            tones[i] = h.tone.toFloat()
-            hues[i] = h.hue.toFloat()
-            chromas[i] = h.chroma.toFloat()
+        val q = com.google.android.material.color.utilities.QuantizerCelebi.quantize(px, 128)
+        val total = q.values.sum().toFloat()
+        if (total <= 0f) return Color(fallback)
+
+        var bestHue = -1f
+        var bestChroma = -1f
+        var bestShare = 0f
+        for ((color, count) in q) {
+            val share = count / total
+            if (share < 0.01f) continue                       // 太小，多半是噪点
+            val hct = com.google.android.material.color.utilities.Hct.fromInt(color)
+            if (hct.chroma < 10.0) continue                   // 近白/近黑，没有色相
+            if (hct.chroma > bestChroma) {
+                bestChroma = hct.chroma.toFloat()
+                bestHue = hct.hue.toFloat()
+                bestShare = share
+            }
         }
-
-        // 取亮度最高的 10%，按色度加权求平均色相（圆形平均，避开 0/360 断层）
-        val sorted = tones.copyOf().also { it.sort() }
-        val thr = sorted[(sorted.size * 90) / 100]
-        var sx = 0.0; var sy = 0.0
-        for (i in px.indices) {
-            if (tones[i] < thr) continue
-            val w = kotlin.math.max(chromas[i], 1f).toDouble()
-            val rad = Math.toRadians(hues[i].toDouble())
-            sx += Math.cos(rad) * w
-            sy += Math.sin(rad) * w
-        }
-        if (sx == 0.0 && sy == 0.0) return Color(fallback)
-
-        var hue = Math.toDegrees(kotlin.math.atan2(sy, sx))
-        if (hue < 0) hue += 360.0
+        if (bestHue < 0f) return Color(fallback)
 
         val scheme = com.google.android.material.color.utilities.SchemeTonalSpot(
-            com.google.android.material.color.utilities.Hct.from(hue, 36.0, 70.0), true, 0.0
+            com.google.android.material.color.utilities.Hct.from(bestHue.toDouble(), 36.0, 70.0),
+            true, 0.0
         )
         Color(com.google.android.material.color.utilities.MaterialDynamicColors().primary().getArgb(scheme))
     } catch (_: Throwable) {
