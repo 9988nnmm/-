@@ -1012,9 +1012,11 @@ fun MagsApp() {
                         opts.forEachIndexed { i, (k, label) ->
                             val gap = kotlin.math.abs(focusPos - i).coerceIn(0f, 1f)
                             val near = 1f - gap                       // 1 = 滑块正压在这一项
+                            // 强调色现在是近白淡调，选中/未选靠「亮度差」区分：
+                            // 未选压到 55% 白，接近 FlowMix 那种「高亮项白、其余灰」的读法
                             val tc = androidx.compose.ui.graphics.lerp(
-                                Color(0xE6E8EEFF),
-                                accent,
+                                Color(0x8CFFFFFF),
+                                if (accent.luminance() > 0.8f) Color.White else accent,
                                 near * near
                             )
                             Box(
