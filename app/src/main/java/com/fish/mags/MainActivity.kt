@@ -334,7 +334,7 @@ suspend fun doSearch(
  */
 /** 用 MCU 从壁纸算出一整套 M3 角色色：primary / secondaryContainer / onSecondaryContainer */
 private fun pickScheme(bitmap: android.graphics.Bitmap?): Triple<Color, Color, Color> {
-    if (bitmap == null) return Triple(Color(DEFAULT_ACCENT), Color(DEFAULT_PILL_BG), Color(DEFAULT_PILL_FG))
+    if (bitmap == null) return Triple(DEFAULT_ACCENT, DEFAULT_PILL_BG, DEFAULT_PILL_FG)
     return try {
         val n = 96
         val small = android.graphics.Bitmap.createScaledBitmap(bitmap, n, n, true)
@@ -343,7 +343,7 @@ private fun pickScheme(bitmap: android.graphics.Bitmap?): Triple<Color, Color, C
         for (i in px.indices) px[i] = px[i] or 0xFF000000.toInt()
         val q = com.google.android.material.color.utilities.QuantizerCelebi.quantize(px, 128)
         val seed = com.google.android.material.color.utilities.Score.score(q).firstOrNull()
-            ?: return Triple(Color(DEFAULT_ACCENT), Color(DEFAULT_PILL_BG), Color(DEFAULT_PILL_FG))
+            ?: return Triple(DEFAULT_ACCENT, DEFAULT_PILL_BG, DEFAULT_PILL_FG)
         val hct = com.google.android.material.color.utilities.Hct.fromInt(seed)
         // 暗色方案：primary 是 tone 80 的浅色，secondaryContainer 是 tone 30 的深色
         val scheme = com.google.android.material.color.utilities.SchemeTonalSpot(hct, true, 0.0)
@@ -354,7 +354,7 @@ private fun pickScheme(bitmap: android.graphics.Bitmap?): Triple<Color, Color, C
             Color(mdc.onSecondaryContainer().getArgb(scheme))
         )
     } catch (_: Throwable) {
-        Triple(Color(DEFAULT_ACCENT), Color(DEFAULT_PILL_BG), Color(DEFAULT_PILL_FG))
+        Triple(DEFAULT_ACCENT, DEFAULT_PILL_BG, DEFAULT_PILL_FG)
     }
 }
 
