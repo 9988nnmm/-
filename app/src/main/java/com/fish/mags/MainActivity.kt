@@ -388,10 +388,12 @@ private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
         var sy = 0.0
         var wsum = 0.0
         var csum = 0.0
+        var colorful = 0
         for (i in px.indices) {
             val h = com.google.android.material.color.utilities.Hct.fromInt(px[i] or 0xFF000000.toInt())
+            if (h.chroma >= 15.0) colorful++           // 「有颜色的像素」占比，用来判断这张图到底花不花
             val w = h.chroma * h.chroma
-            if (w < 40.0) continue                      // 近乎无彩的像素不参与
+            if (w < 40.0) continue                      // 近乎无彩的像素不参与求色相
             val r = Math.toRadians(h.hue)
             sx += Math.cos(r) * w
             sy += Math.sin(r) * w
@@ -404,11 +406,21 @@ private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
         if (hue < 0) hue += 360.0
         hue = Math.round(hue / 6.0) * 6.0
 
-        var chroma = (csum / wsum) * 1.8
-        chroma = chroma.coerceIn(20.0, 92.0)
+        // 饱和度 = 加权平均色度 × (0.4 + 2.2 × 彩色像素占比)
+        //   —— 一整张都在橙里的图(占比~90%) → 接近满饱和，橙色还是橙；
+        //      华为办公这种满屏灰、只有 Logo 和工牌带一点红的图(占比~9%) → 只留一点点暖调，
+        //      不会被那几块红硬拉成大面积橙（这是上一版最大的偏差）
+        val coverage = colorful.toDouble() / (n * n)
+        var chroma = (csum / wsum) * (0.4 + 2.2 * coverage)
+        chroma = chroma.coerceIn(8.0, 92.0)
         chroma = Math.round(chroma / 6.0) * 6.0
 
-        val tone = if (chroma >= 45.0) 70.0 else 78.0
+        // 低饱和时用更亮的明度，否则会变成一坨脏灰
+        val tone = when {
+            chroma >= 45.0 -> 70.0
+            chroma < 18.0 -> 84.0
+            else -> 78.0
+        }
         Color(com.google.android.material.color.utilities.Hct.from(hue, chroma, tone).toInt())
     } catch (_: Throwable) {
         Color(fallback)
