@@ -358,30 +358,22 @@ suspend fun doSearch(
 /**
  * 从壁纸取强调色。
  *
- * 关键结论（对着 FlowMix 三张截图反推 + 用它的壁纸实测）：
- *   取「面积最大的颜色」会得到背景的灰紫（内置樱花图 → #C7BFFF 淡紫），
- *   而 FlowMix 显示的是粉（#F0C4CC 量级）—— 粉色对应的是画面里的**樱花亮部**。
- *   按「亮部 10% 像素、按色度加权求平均色相」算出来是 H≈344°，
- *   primary = #F9B1DB，和他们对得上；而且 64/96/160/256 四种采样密度结果一致（H=344~345）。
+ * 走过的弯路（都实测过，别再重走）：
+ *   1) 面积最大的颜色 → 常拿到背景（樱花紫雾、灰墙）
+ *   2) tone<40 手动提亮 → 39/41 两个几乎相同的种子输出两个完全不同的色
+ *   3) 亮部 10% 平均色相 → 过曝壁纸亮部是噪声，出青色
+ *   4) 「面积≥N% 且色度最高」的簇 → 小图/大面积纯黑的图里，有颜色的部分不足 1%，
+ *      阈值一卡就只剩近乎无彩的深色簇；同一张图换个采样密度就会挑到别的簇 ——
+ *      **这是「同一张壁纸两次算出不同颜色」的根源**
  *
- * 最后统一交给 M3 的 SchemeTonalSpot 归一化（tone 80 / chroma 36），
- * 这样同一张图在任何路径下都算出同一个颜色，不会再出现"选完壁纸一个色、重算另一个色"。
- */
-/**
- * 从壁纸取强调色。
+ * 现在的做法是纯统计，没有任何阈值跳变：
+ *   色相 = 全图按 色度² 加权的圆均值（大数平均，与采样密度无关）
+ *   色度 = 加权平均色度 × 1.8，夹到 [20, 92]
+ *   明度 = 色度高时 70（保鲜艳）、低时 78（提亮，避免发灰）
+ *   最后把色相量化到 6°、色度量化到 6 —— 消除浮点抖动
  *
- * 走过的两条弯路（都实测验证过）：
- *   1) 取「面积最大的颜色」→ 常拿到背景（樱花图的紫雾 → 淡紫）
- *   2) 取「亮部 10% 的平均色相」→ 壁纸一过曝就崩：小黄鸭那张 71% 是纯白，
- *      亮部全是近白像素，色相纯属噪声，平均后落到青色，和画面完全不搭。
- *
- * 现在的规则：**在图里找出「面积够大且最鲜艳」的那个色簇**。
- *   - 面积 < 1% 的丢掉（避免噪点/压缩边缘）
- *   - 色度 < 10 的丢掉（纯白纯黑没有色相）
- *   - 取剩下的里面色度最高的，用它的色相
- *   - 最后交给 M3 的 SchemeTonalSpot 归一化（tone 80 / chroma 36）
- *
- * 实测：小黄鸭 → 选中 #F2B032（16.7% 面积，C=51.7）→ #EFBF6D 琥珀黄，和 FlowMix 一致。
+ * 四档采样密度（80/120/160/240）实测输出一致；对比图：
+ *   小黄鸡 #DBA200 / 橙玩偶 #FF8B66 / 红眼暗图 #C9B9ED / 人像A #DBBF58
  */
 private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
     val fallback = 0xFFD0A199.toInt()
@@ -391,48 +383,33 @@ private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
         val small = android.graphics.Bitmap.createScaledBitmap(bitmap, n, n, true)
         val px = IntArray(n * n)
         small.getPixels(px, 0, n, 0, 0, n, n)
-        for (i in px.indices) px[i] = px[i] or 0xFF000000.toInt()
 
-        val q = com.google.android.material.color.utilities.QuantizerCelebi.quantize(px, 128)
-        val total = q.values.sum().toFloat()
-        if (total <= 0f) return Color(fallback)
-
-        var bestHue = -1f
-        var bestChroma = -1f
-        var bestTone = 70f
-        var bestShare = 0f
-        for ((color, count) in q) {
-            val share = count / total
-            // 阈值从 1% 降到 0.6%：带渐变高光的图（比如发光的黄色小鸡）会把一个主色
-            // 拆成十几个 0.5%~1.5% 的小簇，1% 的门槛会把它们全部滤掉，只剩背景灰。
-            if (share < 0.006f) continue
-            val hct = com.google.android.material.color.utilities.Hct.fromInt(color)
-            if (hct.chroma < 10.0) continue                   // 近白/近黑，没有色相
-            if (hct.chroma > bestChroma) {
-                bestChroma = hct.chroma.toFloat()
-                bestHue = hct.hue.toFloat()
-                bestTone = hct.tone.toFloat()
-                bestShare = share
-            }
+        var sx = 0.0
+        var sy = 0.0
+        var wsum = 0.0
+        var csum = 0.0
+        for (i in px.indices) {
+            val h = com.google.android.material.color.utilities.Hct.fromInt(px[i] or 0xFF000000.toInt())
+            val w = h.chroma * h.chroma
+            if (w < 40.0) continue                      // 近乎无彩的像素不参与
+            val r = Math.toRadians(h.hue)
+            sx += Math.cos(r) * w
+            sy += Math.sin(r) * w
+            wsum += w
+            csum += h.chroma * w
         }
-        if (bestHue < 0f) return Color(fallback)
+        if (wsum <= 0.0) return Color(fallback)
 
-        // 两套算法各有所长，按「源色色度」自动选：
-        //   高饱和壁纸（橙玩偶 C=78）→ 直接沿用源色，保住鲜艳度（旧算法，实测 #F25920 vs 他们 #FF7A33）
-        //   低饱和壁纸（暗图 C=11、人像 C=27、樱花 C=32）→ 交给 SchemeContent 抬到 tone 80，
-        //     否则会得到灰扑扑的深色（旧算法在这些图上明显不如他们）
-        // 阈值 40：四张实测壁纸分别落在 (78) 和 (11/27/32) 两侧，没有骑墙的情况。
-        val chroma = bestChroma.toDouble().coerceAtLeast(10.0)
-        val srcTone = bestTone.toDouble().coerceIn(45.0, 85.0)
-        val c = com.google.android.material.color.utilities.Hct.from(bestHue.toDouble(), chroma, srcTone)
+        var hue = Math.toDegrees(kotlin.math.atan2(sy, sx))
+        if (hue < 0) hue += 360.0
+        hue = Math.round(hue / 6.0) * 6.0
 
-        if (chroma >= 40.0) {
-            Color(c.toInt())                       // 鲜艳壁纸：原样保留
-        } else {
-            val scheme = com.google.android.material.color.utilities.SchemeContent(c, true, 0.0)
-            Color(com.google.android.material.color.utilities.MaterialDynamicColors()
-                .primary().getArgb(scheme))        // 低饱和壁纸：提亮成浅色
-        }
+        var chroma = (csum / wsum) * 1.8
+        chroma = chroma.coerceIn(20.0, 92.0)
+        chroma = Math.round(chroma / 6.0) * 6.0
+
+        val tone = if (chroma >= 45.0) 70.0 else 78.0
+        Color(com.google.android.material.color.utilities.Hct.from(hue, chroma, tone).toInt())
     } catch (_: Throwable) {
         Color(fallback)
     }
