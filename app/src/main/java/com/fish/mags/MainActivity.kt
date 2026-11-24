@@ -138,10 +138,10 @@ data class Glass(
     val con: Float = 1.03f
 )
 
-fun BackdropEffectScope.glass(g: Glass) {
+fun BackdropEffectScope.glass(g: Glass, blurK: Float = LOOK.blurK) {
     val l = LOOK
     colorControls(brightness = 0f, contrast = l.con, saturation = l.sat)
-    blur(g.blur.toPx() * l.blurK)
+    blur(g.blur.toPx() * blurK)
     val k = l.scale
     if (k <= 0f) return
     lens(g.height.toPx() * k, g.amount.toPx() * k,
@@ -1200,7 +1200,7 @@ fun MagsApp() {
                             }
                             itemsIndexed(favs) { idx, it ->
                                 ResultCard(
-                                    backdrop, it, idx,
+                                    backdrop, it, idx, look.blurK,
                                     onCopy = {
                                         clip.setText(AnnotatedString(it.magnet))
                                     },
@@ -1251,7 +1251,7 @@ fun MagsApp() {
                     ) {
                         itemsIndexed(items) { idx, it ->
                             ResultCard(
-                                backdrop, it, idx,
+                                backdrop, it, idx, look.blurK,
                                 onCopy = {
                                     clip.setText(AnnotatedString(it.magnet))
                                 },
@@ -1612,7 +1612,7 @@ private fun PagBtn(label: String, enabled: Boolean, tint: Color, onClick: () -> 
 
 @Composable
 private fun ResultCard(
-    backdrop: LayerBackdrop, item: Item, idx: Int,
+    backdrop: LayerBackdrop, item: Item, idx: Int, blurK: Float,
     onCopy: () -> Unit, onFav: () -> Unit, onSub: () -> Unit, onAdd: () -> Unit
 ) {
     Column(
@@ -1621,7 +1621,9 @@ private fun ResultCard(
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { RoundedCornerShape(22.dp) },
-                effects = { glass(Glass(2.dp, 11.dp, 20.dp)) },
+                // blurK 作为参数传入并在这里被引用：卡片参数变化才会重组，
+                // 否则「玻璃模糊程度」只影响顶栏/排序条，列表卡片纹丝不动（实测像素级无变化）
+                effects = { glass(Glass(2.dp, 11.dp, 20.dp), blurK) },
                 highlight = GlassHi
             )
             .padding(15.dp)
