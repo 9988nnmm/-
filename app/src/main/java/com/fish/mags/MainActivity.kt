@@ -358,64 +358,79 @@ suspend fun doSearch(
 /**
  * 从壁纸取强调色。
  *
- * 走过的弯路（都实测过，别再重走）：
- *   1) 面积最大的颜色 → 常拿到背景（樱花紫雾、灰墙）
- *   2) tone<40 手动提亮 → 39/41 两个几乎相同的种子输出两个完全不同的色
- *   3) 亮部 10% 平均色相 → 过曝壁纸亮部是噪声，出青色
- *   4) 「面积≥N% 且色度最高」的簇 → 小图/大面积纯黑的图里，有颜色的部分不足 1%，
- *      阈值一卡就只剩近乎无彩的深色簇；同一张图换个采样密度就会挑到别的簇 ——
- *      **这是「同一张壁纸两次算出不同颜色」的根源**
+ * 六轮迭代的结论（每一条都是对着 FlowMix 的截图量出来的，别再退回旧方案）：
  *
- * 现在的做法是纯统计，没有任何阈值跳变：
- *   色相 = 全图按 色度² 加权的圆均值（大数平均，与采样密度无关）
- *   色度 = 加权平均色度 × 1.8，夹到 [20, 92]
- *   明度 = 色度高时 70（保鲜艳）、低时 78（提亮，避免发灰）
- *   最后把色相量化到 6°、色度量化到 6 —— 消除浮点抖动
+ *   色相：取「画面里最亮的那块**有色**区域」的平均色相（按色度加权）。
+ *         —— 蓝发+小黄鸡的图，最亮的彩色区是发光的黄鸡 → 黄（他们是 #F5D24A）；
+ *            取全图加权平均会得到肤色/蓝发 → 偏差很大。
+ *         —— 之所以要排除「无彩像素」，是因为过曝的图最亮的都是近白，色相纯属噪声（早期版本栽在这）。
  *
- * 四档采样密度（80/120/160/240）实测输出一致；对比图：
- *   小黄鸡 #DBA200 / 橙玩偶 #FF8B66 / 红眼暗图 #C9B9ED / 人像A #DBBF58
+ *   饱和度：看整张图到底花不花（色度≥15 的像素占比）：
+ *         ≥20%  → 用亮部区域自己的色度（鲜艳的继续鲜艳：橙玩偶 #FF8C57）
+ *         <20%  → 用全图平均色度压下去（华为办公那种满屏灰 → 近中性 #CDD3D3，他们 #DCD8DC）
+ *
+ *   明度：饱和度高的用 70，低的提到 78/84，避免一坨脏灰。
+ *
+ *   最后色相量化到 6°、色度量化到 6，消除浮点抖动（四档采样密度输出一致）。
  */
 private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
     val fallback = 0xFFD0A199.toInt()
     if (bitmap == null) return Color(fallback)
     return try {
         val n = 120
+        val N = n * n
         val small = android.graphics.Bitmap.createScaledBitmap(bitmap, n, n, true)
-        val px = IntArray(n * n)
+        val px = IntArray(N)
         small.getPixels(px, 0, n, 0, 0, n, n)
+
+        val tones = DoubleArray(N)
+        val hues = DoubleArray(N)
+        val chrs = DoubleArray(N)
+        var sumC = 0.0
+        var colorful = 0
+        var k = 0
+        for (i in 0 until N) {
+            val h = com.google.android.material.color.utilities.Hct.fromInt(px[i] or 0xFF000000.toInt())
+            tones[i] = h.tone
+            hues[i] = h.hue
+            chrs[i] = h.chroma
+            sumC += h.chroma
+            if (h.chroma >= 15.0) { colorful++; k++ }
+        }
+        val coverage = colorful.toDouble() / N
+        val avgC = sumC / N
+        if (k == 0) return Color(fallback)          // 整张图没有彩色像素
+
+        // 有彩像素里亮度最高的 15%，作为「亮部」
+        val ts = DoubleArray(k)
+        var j = 0
+        for (i in 0 until N) if (chrs[i] >= 15.0) ts[j++] = tones[i]
+        ts.sort()
+        val thr = ts[((k - 1) * 0.85).toInt()]
 
         var sx = 0.0
         var sy = 0.0
-        var wsum = 0.0
-        var csum = 0.0
-        var colorful = 0
-        for (i in px.indices) {
-            val h = com.google.android.material.color.utilities.Hct.fromInt(px[i] or 0xFF000000.toInt())
-            if (h.chroma >= 15.0) colorful++           // 「有颜色的像素」占比，用来判断这张图到底花不花
-            val w = h.chroma * h.chroma
-            if (w < 40.0) continue                      // 近乎无彩的像素不参与求色相
-            val r = Math.toRadians(h.hue)
-            sx += Math.cos(r) * w
-            sy += Math.sin(r) * w
-            wsum += w
-            csum += h.chroma * w
+        var cw = 0.0
+        var cs = 0.0
+        for (i in 0 until N) {
+            if (chrs[i] < 15.0 || tones[i] < thr) continue
+            val r = Math.toRadians(hues[i])
+            sx += Math.cos(r) * chrs[i]
+            sy += Math.sin(r) * chrs[i]
+            cs += chrs[i] * chrs[i]
+            cw += chrs[i]
         }
-        if (wsum <= 0.0) return Color(fallback)
+        if (cw <= 0.0) return Color(fallback)
 
         var hue = Math.toDegrees(kotlin.math.atan2(sy, sx))
         if (hue < 0) hue += 360.0
         hue = Math.round(hue / 6.0) * 6.0
 
-        // 饱和度 = 加权平均色度 × (0.4 + 2.2 × 彩色像素占比)
-        //   —— 一整张都在橙里的图(占比~90%) → 接近满饱和，橙色还是橙；
-        //      华为办公这种满屏灰、只有 Logo 和工牌带一点红的图(占比~9%) → 只留一点点暖调，
-        //      不会被那几块红硬拉成大面积橙（这是上一版最大的偏差）
-        val coverage = colorful.toDouble() / (n * n)
-        var chroma = (csum / wsum) * (0.4 + 2.2 * coverage)
+        var chroma = if (coverage >= 0.20) (cs / cw) * 1.15
+                     else avgC * (0.4 + 2.2 * coverage)
         chroma = chroma.coerceIn(8.0, 92.0)
         chroma = Math.round(chroma / 6.0) * 6.0
 
-        // 低饱和时用更亮的明度，否则会变成一坨脏灰
         val tone = when {
             chroma >= 45.0 -> 70.0
             chroma < 18.0 -> 84.0
