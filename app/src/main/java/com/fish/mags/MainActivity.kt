@@ -403,7 +403,9 @@ private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
         var bestShare = 0f
         for ((color, count) in q) {
             val share = count / total
-            if (share < 0.01f) continue                       // 太小，多半是噪点
+            // 阈值从 1% 降到 0.6%：带渐变高光的图（比如发光的黄色小鸡）会把一个主色
+            // 拆成十几个 0.5%~1.5% 的小簇，1% 的门槛会把它们全部滤掉，只剩背景灰。
+            if (share < 0.006f) continue
             val hct = com.google.android.material.color.utilities.Hct.fromInt(color)
             if (hct.chroma < 10.0) continue                   // 近白/近黑，没有色相
             if (hct.chroma > bestChroma) {
