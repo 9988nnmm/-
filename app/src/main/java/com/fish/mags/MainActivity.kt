@@ -431,10 +431,12 @@ private fun pickAccent(bitmap: android.graphics.Bitmap?): Color {
         chroma = chroma.coerceIn(8.0, 92.0)
         chroma = Math.round(chroma / 6.0) * 6.0
 
+        // 明度：FlowMix 的输出普遍很亮（实测 tone 86~91），我们之前停在 70~84 显得发闷。
+        // 按色度分三档，色度越低越亮 —— 低饱和时颜色本来就淡，再压暗就成脏灰了。
         val tone = when {
-            chroma >= 45.0 -> 70.0
-            chroma < 18.0 -> 84.0
-            else -> 78.0
+            chroma >= 45.0 -> 84.0
+            chroma >= 25.0 -> 88.0
+            else -> 90.0
         }
         Color(com.google.android.material.color.utilities.Hct.from(hue, chroma, tone).toInt())
     } catch (_: Throwable) {
