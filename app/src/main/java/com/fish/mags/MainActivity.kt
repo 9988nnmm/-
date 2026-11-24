@@ -167,11 +167,16 @@ data class Look(
     val sat: Float get() = when (saturation) { 0 -> 1.15f; 1 -> 1.5f; else -> 1.95f }
     // 模糊强度的倍率：通透 0.45 / 默认 1.0 / 朦胧 2.1
     // 所有 glass(...) 里的 blur 都乘这个系数，改一档整机玻璃一起变
-    val blurK: Float get() = when (blur) { 0 -> 0.45f; 1 -> 1.0f; else -> 2.1f }
+    val blurK: Float get() = when (blur) { 0 -> 0.30f; 1 -> 1.0f; else -> 2.4f }
 }
 
-// 绘制线程要读，用 @Volatile 而不进 Compose 状态；界面侧改了 look 会触发重组再同步过来
-@Volatile var LOOK = Look()
+// 绘制阶段要读。之前是 @Volatile 普通变量，改设置后「列表里的卡片」不会重绘，
+// 导致玻璃模糊程度只对顶栏/排序条生效、搜索结果卡片纹丝不动。
+// 改成 Compose 状态后，effects{} 里读到它就会登记依赖，改动时自动重绘。
+private val LOOK_STATE = androidx.compose.runtime.mutableStateOf(Look())
+var LOOK: Look
+    get() = LOOK_STATE.value
+    set(v) { LOOK_STATE.value = v }
 
 // 供 SegRow 这类没有 accent 参数的组合函数读取。
 // 必须是 Compose 状态：普通 var 改了不会触发重组，设置页会一直用首次组合时的颜色。

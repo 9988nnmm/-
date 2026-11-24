@@ -12,8 +12,8 @@ android {
         applicationId = "com.fish.mags.glass"
         minSdk = 33
         targetSdk = 36
-        versionCode = 64
-        versionName = "5.2-glass-blur"
+        versionCode = 65
+        versionName = "5.2.1-blur-global"
     }
     // 固定签名：keystore 就在模块目录里。签名稳定之后才能覆盖安装，
     // 否则每次云端构建的 debug keystore 都不同，装新包必须先卸载（会丢掉设备 UUID）。
